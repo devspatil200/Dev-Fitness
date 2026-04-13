@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DevFit Coach - AI Powered</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="theme-color" content="#0f172a">
+    <style>
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .hidden { display: none; }
+        .btn { padding: 14px; border-radius: 12px; font-weight: bold; width: 100%; margin-bottom: 12px; cursor: pointer; border: none; color: white; font-size: 16px; transition: all 0.2s; }
+        .btn:active { transform: scale(0.98); }
+        .btn-green { background: linear-gradient(135deg, #10b981, #059669); }
+        .btn-blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .btn-purple { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+        .btn-orange { background: linear-gradient(135deg, #f97316, #ea580c); }
+        .btn-red { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .input-box { width: 100%; padding: 14px; margin-bottom: 12px; background: #334155; border: 2px solid #475569; color: white; border-radius: 10px; box-sizing: border-box; font-size: 16px; }
+        .input-box:focus { border-color: #10b981; outline: none; }
+        .card { background: linear-gradient(135deg, #1e293b, #0f172a); padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 1px solid #334155; margin-bottom: 15px; }
+        .plan-card { background: linear-gradient(135deg, #1e293b, #334155); padding: 15px; border-radius: 12px; margin-bottom: 10px; border-left: 4px solid #10b981; }
+        .goal-card { background: #334155; padding: 20px; border-radius: 12px; margin: 10px 0; cursor: pointer; border: 3px solid transparent; transition: all 0.3s; }
+        .goal-card.selected { border-color: #10b981; background: #1e293b; }
+        .bmi-box { background: linear-gradient(135deg, #10b981, #059669); padding: 20px; border-radius: 12px; text-align: center; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+<div id="app" class="p-4 max-w-md mx-auto min-h-screen">
+    <!-- Content loads here -->
+</div>
+
+<script>
+// --- DATABASE ---
+let users = JSON.parse(localStorage.getItem('devfit_users') || '[]');
+let currentUser = JSON.parse(localStorage.getItem('devfit_current_user') || 'null');
+let clients = JSON.parse(localStorage.getItem('devfit_clients') || '[]');
+let workouts = JSON.parse(localStorage.getItem('devfit_workouts') || '[]');
+
+// --- AI PLAN GENERATOR ---
+const AI_PLANS = {
+    weight_loss: {
+        workout: [
+            { day: "Day 1 - Cardio", exercises: ["30 min Brisk Walking", "20 min Cycling", "15 min Jump Rope", "10 min Stretching"] },
+            { day: "Day 2 - Full Body", exercises: ["Squats 3x15", "Push-ups 3x12", "Lunges 3x12 each leg", "Plank 3x30 sec", "Burpees 3x10"] },
+            { day: "Day 3 - HIIT", exercises: ["High Knees 4x30 sec", "Mountain Climbers 4x30 sec", "Jump Squats 4x15", "Arm Circles 4x30 sec"] },
+            { day: "Day 4 - Rest", exercises: ["Light Walking", "Stretching", "Yoga"] },
+            { day: "Day 5 - Strength", exercises: ["Dumbbell Rows 3x12", "Shoulder Press 3x12", "Deadlifts 3x10", "Bicep Curls 3x15"] },
+            { day: "Day 6 - Cardio", exercises: ["40 min Running", "Swimming 20 min", "Cycling 30 min"] },            { day: "Day 7 - Active Rest", exercises: ["Walking", "Light Stretching"] }
+        ],
+        diet: {
+            calories: "1500-1800 kcal/day",
+            meals: [
+                { time: "Breakfast", food: "Oats with fruits, Green tea, 2 Boiled eggs" },
+                { time: "Mid-Morning", food: "Green tea, Handful of almonds" },
+                { time: "Lunch", food: "Salad, Grilled chicken/fish, Brown rice (small portion), Dal" },
+                { time: "Evening", food: "Green tea, Roasted chana" },
+                { time: "Dinner", food: "Vegetable soup, Grilled vegetables, Roti (1)" },
+                { time: "Before Bed", food: "Warm water with lemon" }
+            ],
+            tips: ["Drink 3-4L water daily", "Avoid sugar and fried food", "Eat every 3 hours", "No carbs after 7 PM"]
+        }
+    },
+    muscle_gain: {
+        workout: [
+            { day: "Day 1 - Chest & Triceps", exercises: ["Bench Press 4x10", "Incline Dumbbell Press 4x10", "Cable Fly 3x12", "Tricep Dips 3x12", "Tricep Pushdown 3x15"] },
+            { day: "Day 2 - Back & Biceps", exercises: ["Pull-ups 4x10", "Barbell Rows 4x10", "Lat Pulldown 3x12", "Barbell Curls 3x12", "Hammer Curls 3x15"] },
+            { day: "Day 3 - Legs", exercises: ["Squats 4x10", "Leg Press 4x12", "Leg Curls 3x12", "Calf Raises 4x15", "Lunges 3x12"] },
+            { day: "Day 4 - Rest", exercises: ["Rest & Recovery", "Light Walking"] },
+            { day: "Day 5 - Shoulders & Abs", exercises: ["Military Press 4x10", "Lateral Raises 3x12", "Front Raises 3x12", "Shrugs 3x15", "Plank 3x60 sec"] },
+            { day: "Day 6 - Full Body", exercises: ["Deadlifts 4x8", "Bench Press 3x10", "Squats 3x10", "Pull-ups 3x10"] },
+            { day: "Day 7 - Rest", exercises: ["Complete Rest"] }
+        ],
+        diet: {
+            calories: "2500-3000 kcal/day",
+            meals: [
+                { time: "Breakfast", food: "4 Egg whites + 2 whole eggs, Oats with banana, Milk" },
+                { time: "Mid-Morning", food: "Protein shake, Peanut butter sandwich" },
+                { time: "Lunch", food: "Chicken breast (200g) / Paneer, Brown rice, Dal, Vegetables, Curd" },
+                { time: "Pre-Workout", food: "Banana, Black coffee" },
+                { time: "Post-Workout", food: "Whey protein shake, 4-5 egg whites" },
+                { time: "Dinner", food: "Fish/Chicken (200g), Sweet potato, Salad, Dal" },
+                { time: "Before Bed", food: "Casein protein or Milk with nuts" }
+            ],
+            tips: ["Eat every 2-3 hours", "Consume 2g protein per kg bodyweight", "Drink 4L water daily", "Sleep 7-8 hours"]
+        }
+    },
+    maintenance: {
+        workout: [
+            { day: "Day 1 - Upper Body", exercises: ["Push-ups 3x15", "Dumbbell Press 3x12", "Rows 3x12", "Shoulder Press 3x12"] },
+            { day: "Day 2 - Lower Body", exercises: ["Squats 3x15", "Lunges 3x12", "Calf Raises 3x15", "Glute Bridge 3x15"] },
+            { day: "Day 3 - Cardio", exercises: ["30 min Jogging", "Cycling 20 min", "Skipping 10 min"] },
+            { day: "Day 4 - Rest", exercises: ["Yoga", "Stretching"] },
+            { day: "Day 5 - Core", exercises: ["Plank 3x45 sec", "Crunches 3x20", "Leg Raises 3x15", "Russian Twist 3x20"] },
+            { day: "Day 6 - Active", exercises: ["Sports activity", "Swimming", "Hiking"] },
+            { day: "Day 7 - Rest", exercises: ["Complete Rest"] }
+        ],
+        diet: {            calories: "2000-2200 kcal/day",
+            meals: [
+                { time: "Breakfast", food: "Oats with milk and fruits, 2 Eggs" },
+                { time: "Mid-Morning", food: "Fruit, Nuts" },
+                { time: "Lunch", food: "Roti (2), Dal, Vegetables, Salad, Curd" },
+                { time: "Evening", food: "Tea, Biscuits or Sprouts" },
+                { time: "Dinner", food: "Roti (2), Dal, Vegetables, Salad" },
+                { time: "Before Bed", food: "Milk" }
+            ],
+            tips: ["Balanced diet", "Regular exercise", "8 hours sleep", "Stay hydrated"]
+        }
+    }
+};
+
+// --- APP FUNCTIONS ---
+function init() {
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+
+    if (!currentUser) {
+        showHome(app);
+    } else if (currentUser.role === 'coach') {
+        showCoachDashboard(app);
+    } else {
+        // Check if client has profile
+        let client = clients.find(c => c.id === currentUser.id);
+        if (!client || !client.profileComplete) {
+            showClientOnboarding(app);
+        } else {
+            showClientDashboard(app);
+        }
+    }
+}
+
+function showHome(app) {
+    app.innerHTML = `
+        <div class="text-center mt-16">
+            <h1 class="text-4xl font-bold text-emerald-400 mb-3">🏋️ DevFit Coach</h1>
+            <p class="text-gray-400 mb-10 text-lg">AI-Powered Fitness Transformation</p>
+            <button onclick="showLogin()" class="btn btn-green text-xl">🚀 Get Started</button>
+            <button onclick="showLogin()" class="btn btn-blue text-xl">👨‍🏫 I'm a Coach</button>
+        </div>
+    `;
+}
+
+function showLogin() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        <div class="card mt-10">
+            <h2 class="text-2xl font-bold mb-6 text-center">🔐 Login / Sign Up</h2>            <input id="login-email" class="input-box" type="email" placeholder="Email Address">
+            <input id="login-pass" class="input-box" type="password" placeholder="Password">
+            <select id="login-role" class="input-box">
+                <option value="client">I am a Client</option>
+                <option value="coach">I am a Coach</option>
+            </select>
+            <div class="flex gap-3 mt-4">
+                <button onclick="handleLogin()" class="btn btn-green flex-1">Login</button>
+                <button onclick="handleSignup()" class="btn btn-blue flex-1">Sign Up</button>
+            </div>
+            <button onclick="init()" class="text-gray-400 mt-6 text-sm underline w-full text-center">Back to Home</button>
+        </div>
+    `;
+}
+
+// --- CLIENT ONBOARDING (AI QUESTIONNAIRE) ---
+function showClientOnboarding(app) {
+    app.innerHTML = `
+        <div class="card mt-4">
+            <h2 class="text-2xl font-bold mb-4 text-emerald-400">📋 Your Fitness Profile</h2>
+            <p class="text-gray-400 mb-6 text-sm">Tell us about yourself. We'll create your perfect plan!</p>
+            
+            <input id="client-name" class="input-box" placeholder="Your Name">
+            <input id="client-age" class="input-box" type="number" placeholder="Age (years)">
+            <div class="grid grid-cols-2 gap-2">
+                <input id="client-weight" class="input-box" type="number" placeholder="Weight (kg)">
+                <input id="client-height" class="input-box" type="number" placeholder="Height (cm)">
+            </div>
+            
+            <h3 class="font-bold mb-3 mt-4">🎯 What's your goal?</h3>
+            <div class="goal-card" onclick="selectGoal('weight_loss')">
+                <div class="font-bold text-orange-400">🔥 Weight Loss</div>
+                <div class="text-sm text-gray-400">Lose fat and get lean</div>
+            </div>
+            <div class="goal-card" onclick="selectGoal('muscle_gain')">
+                <div class="font-bold text-blue-400">💪 Muscle Gain</div>
+                <div class="text-sm text-gray-400">Build muscle and strength</div>
+            </div>
+            <div class="goal-card" onclick="selectGoal('maintenance')">
+                <div class="font-bold text-green-400">⚡ Fitness Maintenance</div>
+                <div class="text-sm text-gray-400">Stay fit and healthy</div>
+            </div>
+            <input type="hidden" id="selected-goal">
+            
+            <h3 class="font-bold mb-3 mt-4">🏥 Any health issues?</h3>
+            <input id="client-issues" class="input-box" placeholder="e.g., Back pain, Knee injury, Diabetes (Optional)">
+            
+            <button onclick="generateAIPlan()" class="btn btn-purple mt-4 text-lg">✨ Generate My AI Plan</button>
+        </div>
+    `;}
+
+function selectGoal(goal) {
+    document.querySelectorAll('.goal-card').forEach(c => c.classList.remove('selected'));
+    event.target.closest('.goal-card').classList.add('selected');
+    document.getElementById('selected-goal').value = goal;
+}
+
+function generateAIPlan() {
+    let name = document.getElementById('client-name').value.trim();
+    let age = document.getElementById('client-age').value;
+    let weight = document.getElementById('client-weight').value;
+    let height = document.getElementById('client-height').value;
+    let goal = document.getElementById('selected-goal').value;
+    let issues = document.getElementById('client-issues').value.trim();
+
+    if(!name || !age || !weight || !height || !goal) {
+        alert("Please fill all required fields and select your goal!");
+        return;
+    }
+
+    // Calculate BMI
+    let heightInM = height / 100;
+    let bmi = (weight / (heightInM * heightInM)).toFixed(1);
+    let bmiCategory = bmi < 18.5 ? "Underweight" : bmi < 25 ? "Normal" : bmi < 30 ? "Overweight" : "Obese";
+
+    // Get AI generated plan
+    let plan = AI_PLANS[goal];
+
+    // Create client profile with auto-generated plan
+    let clientProfile = {
+        id: currentUser.id,
+        name: name,
+        age: parseInt(age),
+        weight: parseFloat(weight),
+        height: parseFloat(height),
+        bmi: bmi,
+        bmiCategory: bmiCategory,
+        goal: goal,
+        healthIssues: issues || "None",
+        workoutPlan: plan.workout,
+        dietPlan: plan.diet,
+        profileComplete: true,
+        createdAt: new Date().toISOString(),
+        progress: []
+    };
+
+    // Save to database
+    let existingIndex = clients.findIndex(c => c.id === currentUser.id);
+    if(existingIndex >= 0) {        clients[existingIndex] = clientProfile;
+    } else {
+        clients.push(clientProfile);
+    }
+    
+    localStorage.setItem('devfit_clients', JSON.stringify(clients));
+    
+    // Update user name
+    let userIndex = users.findIndex(u => u.id === currentUser.id);
+    if(userIndex >= 0) {
+        users[userIndex].name = name;
+        currentUser.name = name;
+        localStorage.setItem('devfit_users', JSON.stringify(users));
+        localStorage.setItem('devfit_current_user', JSON.stringify(currentUser));
+    }
+
+    alert(`🎉 Your AI Plan is Ready!\n\nBMI: ${bmi} (${bmiCategory})\nGoal: ${goal.replace('_', ' ').toUpperCase()}\n\nCheck your personalized workout & diet plan!`);
+    init();
+}
+
+// --- CLIENT DASHBOARD WITH PLANS ---
+function showClientDashboard(app) {
+    let client = clients.find(c => c.id === currentUser.id);
+    
+    app.innerHTML = `
+        <div class="flex justify-between items-center mb-4 mt-2">
+            <h2 class="text-xl font-bold text-emerald-400">💪 Hello, ${client.name}</h2>
+            <button onclick="logout()" class="text-red-400 text-sm">Logout</button>
+        </div>
+
+        <!-- BMI Card -->
+        <div class="bmi-box">
+            <div class="text-sm opacity-90">Your BMI</div>
+            <div class="text-4xl font-bold">${client.bmi}</div>
+            <div class="text-sm mt-1">${client.bmiCategory}</div>
+            <div class="text-xs mt-2 opacity-80">Goal: ${client.goal.replace('_', ' ').toUpperCase()}</div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-2 mb-4">
+            <button onclick="showTab('workout')" class="btn btn-blue flex-1 py-3">🏋️ Workout Plan</button>
+            <button onclick="showTab('diet')" class="btn btn-orange flex-1 py-3">🥗 Diet Plan</button>
+        </div>
+
+        <!-- Workout Plan -->
+        <div id="tab-workout">
+            <h3 class="font-bold mb-3 text-lg">📅 Your Weekly Workout Plan</h3>
+            ${client.workoutPlan.map((day, idx) => `
+                <div class="plan-card">
+                    <div class="font-bold text-emerald-300 mb-2">${day.day}</div>                    <ul class="text-sm space-y-1">
+                        ${day.exercises.map(ex => `<li class="text-gray-300">• ${ex}</li>`).join('')}
+                    </ul>
+                </div>
+            `).join('')}
+        </div>
+
+        <!-- Diet Plan -->
+        <div id="tab-diet" class="hidden">
+            <div class="card mb-4">
+                <div class="text-sm text-gray-400">Daily Calories</div>
+                <div class="text-2xl font-bold text-orange-400">${client.dietPlan.calories}</div>
+            </div>
+            
+            <h3 class="font-bold mb-3 text-lg">️ Meal Plan</h3>
+            ${client.dietPlan.meals.map(meal => `
+                <div class="plan-card" style="border-left-color: #f97316;">
+                    <div class="font-bold text-orange-300">${meal.time}</div>
+                    <div class="text-sm text-gray-300 mt-1">${meal.food}</div>
+                </div>
+            `).join('')}
+
+            <div class="card mt-4">
+                <h4 class="font-bold mb-2 text-emerald-400">💡 Pro Tips</h4>
+                <ul class="text-sm space-y-1">
+                    ${client.dietPlan.tips.map(tip => `<li class="text-gray-300">✓ ${tip}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Log Workout Button -->
+        <button onclick="showLogWorkout()" class="btn btn-green mt-4">📝 Log Today's Workout</button>
+
+        <!-- Workout History -->
+        <div class="mt-6">
+            <h3 class="font-bold mb-3">📊 Recent Workouts</h3>
+            <div id="workout-history">
+                ${getWorkoutHistory(client.id)}
+            </div>
+        </div>
+    `;
+}
+
+function showTab(tab) {
+    document.getElementById('tab-workout').classList.add('hidden');
+    document.getElementById('tab-diet').classList.add('hidden');
+    document.getElementById(`tab-${tab}`).classList.remove('hidden');
+}
+
+function getWorkoutHistory(clientId) {    let history = workouts.filter(w => w.userId === clientId).slice(-5).reverse();
+    if(history.length === 0) return '<p class="text-gray-500 text-center py-4">No workouts logged yet</p>';
+    
+    return history.map(w => `
+        <div class="bg-slate-700 p-3 rounded-lg mb-2">
+            <div class="font-semibold text-emerald-300">${w.exercise}</div>
+            <div class="text-sm text-gray-400">${w.sets} sets × ${w.reps} reps • ${new Date(w.date).toLocaleDateString()}</div>
+        </div>
+    `).join('');
+}
+
+function showLogWorkout() {
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        <div class="card mt-10">
+            <h2 class="text-2xl font-bold mb-4">📝 Log Workout</h2>
+            <input id="log-exercise" class="input-box" placeholder="Exercise Name">
+            <div class="grid grid-cols-2 gap-2">
+                <input id="log-sets" class="input-box" type="number" placeholder="Sets">
+                <input id="log-reps" class="input-box" type="number" placeholder="Reps">
+            </div>
+            <input id="log-weight" class="input-box" type="number" placeholder="Weight (kg) - Optional">
+            <button onclick="saveWorkoutLog()" class="btn btn-green mt-2">💾 Save</button>
+            <button onclick="init()" class="btn btn-blue mt-2">← Back</button>
+        </div>
+    `;
+}
+
+function saveWorkoutLog() {
+    let exercise = document.getElementById('log-exercise').value.trim();
+    let sets = document.getElementById('log-sets').value;
+    let reps = document.getElementById('log-reps').value;
+    let weight = document.getElementById('log-weight').value || '0';
+
+    if(!exercise || !sets || !reps) {
+        alert("Please fill exercise, sets and reps!");
+        return;
+    }
+
+    workouts.push({
+        userId: currentUser.id,
+        exercise, sets, reps, weight,
+        date: new Date().toISOString()
+    });
+    localStorage.setItem('devfit_workouts', JSON.stringify(workouts));
+    
+    alert("Workout logged successfully!");
+    init();
+}
+// --- COACH DASHBOARD ---
+function showCoachDashboard(app) {
+    let myClients = clients.filter(c => c.coachId === currentUser.id || c.email === currentUser.email);
+    
+    app.innerHTML = `
+        <div class="flex justify-between items-center mb-6 mt-2">
+            <h2 class="text-2xl font-bold text-blue-400">👨‍🏫 Coach Dashboard</h2>
+            <button onclick="logout()" class="text-red-400 text-sm">Logout</button>
+        </div>
+
+        <div class="card mb-6">
+            <h3 class="text-lg font-bold mb-4">➕ Add New Client</h3>
+            <input id="new-client-email" class="input-box" placeholder="Client Email">
+            <input id="new-client-pass" class="input-box" type="password" placeholder="Set Password">
+            <button onclick="registerClient()" class="btn btn-blue">Register Client</button>
+        </div>
+
+        <h3 class="text-lg font-bold mb-3"> My Clients (${myClients.length})</h3>
+        ${myClients.length ? myClients.map(client => `
+            <div class="card">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <div class="font-bold text-lg">${client.name || client.email}</div>
+                        <div class="text-sm text-gray-400">BMI: ${client.bmi} • Goal: ${client.goal.replace('_', ' ')}</div>
+                    </div>
+                    <button onclick="viewClientProfile(${client.id})" class="btn btn-green py-2 px-4 text-sm w-auto">View</button>
+                </div>
+                <div class="text-xs text-gray-500">
+                    Age: ${client.age} • Weight: ${client.weight}kg • Height: ${client.height}cm
+                </div>
+            </div>
+        `).join('') : '<p class="text-gray-500 text-center py-4">No clients yet</p>'}
+    `;
+}
+
+function registerClient() {
+    let email = document.getElementById('new-client-email').value.trim();
+    let pass = document.getElementById('new-client-pass').value.trim();
+
+    if(!email || !pass) {
+        alert("Please fill email and password!");
+        return;
+    }
+
+    if(users.find(u => u.email === email)) {
+        alert("Email already registered!");
+        return;
+    }
+
+    let newClient = {        id: Date.now(),
+        email,
+        pass,
+        role: 'client',
+        coachId: currentUser.id,
+        profileComplete: false
+    };
+
+    users.push(newClient);
+    localStorage.setItem('devfit_users', JSON.stringify(users));
+    
+    alert("Client registered! They can now login and complete their profile.");
+    init();
+}
+
+function viewClientProfile(clientId) {
+    let client = clients.find(c => c.id === clientId);
+    if(!client) return;
+
+    const app = document.getElementById('app');
+    app.innerHTML = `
+        <div class="mt-4">
+            <button onclick="showCoachDashboard(document.getElementById('app'))" class="text-gray-400 mb-4">← Back</button>
+            
+            <div class="card">
+                <h2 class="text-2xl font-bold mb-4">${client.name}</h2>
+                
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="bg-slate-700 p-3 rounded">
+                        <div class="text-xs text-gray-400">Age</div>
+                        <div class="font-bold">${client.age} years</div>
+                    </div>
+                    <div class="bg-slate-700 p-3 rounded">
+                        <div class="text-xs text-gray-400">BMI</div>
+                        <div class="font-bold text-emerald-400">${client.bmi}</div>
+                    </div>
+                    <div class="bg-slate-700 p-3 rounded">
+                        <div class="text-xs text-gray-400">Weight</div>
+                        <div class="font-bold">${client.weight} kg</div>
+                    </div>
+                    <div class="bg-slate-700 p-3 rounded">
+                        <div class="text-xs text-gray-400">Height</div>
+                        <div class="font-bold">${client.height} cm</div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="text-sm text-gray-400">Goal</div>
+                    <div class="font-bold text-lg text-blue-400">${client.goal.replace('_', ' ').toUpperCase()}</div>
+                </div>
+                <div class="mb-4">
+                    <div class="text-sm text-gray-400">Health Issues</div>
+                    <div class="text-gray-300">${client.healthIssues}</div>
+                </div>
+
+                <div class="border-t border-gray-700 pt-4 mt-4">
+                    <h3 class="font-bold mb-2">Workout Plan (${client.workoutPlan.length} days)</h3>
+                    ${client.workoutPlan.map(day => `
+                        <div class="bg-slate-700 p-2 rounded mb-2 text-sm">
+                            <div class="font-semibold text-emerald-300">${day.day}</div>
+                            <div class="text-gray-400 text-xs">${day.exercises.join(', ')}</div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <div class="border-t border-gray-700 pt-4 mt-4">
+                    <h3 class="font-bold mb-2">Diet Plan</h3>
+                    <div class="text-sm text-gray-300 mb-2">Calories: <span class="text-orange-400 font-bold">${client.dietPlan.calories}</span></div>
+                    ${client.dietPlan.meals.map(meal => `
+                        <div class="bg-slate-700 p-2 rounded mb-2 text-sm">
+                            <div class="font-semibold text-orange-300">${meal.time}</div>
+                            <div class="text-gray-400 text-xs">${meal.food}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// --- AUTH FUNCTIONS ---
+function handleSignup() {
+    let email = document.getElementById('login-email').value.trim();
+    let pass = document.getElementById('login-pass').value.trim();
+    let role = document.getElementById('login-role').value;
+
+    if(!email || !pass) {
+        alert("Please fill Email and Password!");
+        return;
+    }
+    
+    if(users.find(u => u.email === email)) {
+        alert("This email is already registered!");
+        return;
+    }
+
+    let newUser = { id: Date.now(), email, pass, role };
+    users.push(newUser);
+    localStorage.setItem('devfit_users', JSON.stringify(users));    
+    alert("Account Created! Now login.");
+    showLogin();
+}
+
+function handleLogin() {
+    let email = document.getElementById('login-email').value.trim();
+    let pass = document.getElementById('login-pass').value.trim();
+
+    let user = users.find(u => u.email === email && u.pass === pass);
+    
+    if (user) {
+        currentUser = user;
+        localStorage.setItem('devfit_current_user', JSON.stringify(user));
+        init();
+    } else {
+        alert("Wrong Email or Password!");
+    }
+}
+
+function logout() {
+    currentUser = null;
+    localStorage.removeItem('devfit_current_user');
+    init();
+}
+
+// Start app
+init();
+</script>
+
+</body>
+</html>
