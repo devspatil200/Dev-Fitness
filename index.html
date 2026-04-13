@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DevFit Coach</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="theme-color" content="#0f172a">
+    <style>
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .hidden { display: none; }
+        .btn { padding: 12px; border-radius: 10px; font-weight: bold; width: 100%; margin-bottom: 10px; cursor: pointer; border: none; color: white; font-size: 16px; }
+        .btn-green { background-color: #10b981; }
+        .btn-blue { background-color: #3b82f6; }
+        .btn-purple { background-color: #a855f7; }
+        .btn-red { background-color: #ef4444; }
+        .input-box { width: 100%; padding: 12px; margin-bottom: 10px; background: #334155; border: 1px solid #475569; color: white; border-radius: 8px; box-sizing: border-box; }
+        .card { background-color: #1e293b; padding: 20px; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    </style>
+</head>
+<body>
+
+    <!-- Container for App -->
+    <div id="app" class="p-4 max-w-md mx-auto min-h-screen">
+        <!-- Content loads here -->
+    </div>
+
+    <script>
+        // --- 1. DATABASE (LocalStorage) ---
+        // Data save hotay tumchya mobile/browser madhe
+        let users = JSON.parse(localStorage.getItem('devfit_users') || '[]');
+        let currentUser = JSON.parse(localStorage.getItem('devfit_current_user') || 'null');
+        let workouts = JSON.parse(localStorage.getItem('devfit_workouts') || '[]');
+        let clients = JSON.parse(localStorage.getItem('devfit_clients') || '[]');
+
+        // --- 2. APP LOGIC ---
+        
+        function init() {
+            const app = document.getElementById('app');
+            app.innerHTML = ''; // Clear screen
+
+            if (!currentUser) {
+                showHome(app);
+            } else {
+                if (currentUser.role === 'coach') {
+                    showCoachDashboard(app);
+                } else {
+                    showClientDashboard(app);
+                }
+            }        }
+
+        // --- SCREENS ---
+
+        function showHome(app) {
+            app.innerHTML = `
+                <div class="text-center mt-10">
+                    <h1 class="text-3xl font-bold text-emerald-400 mb-2">DevFit Coach</h1>
+                    <p class="text-gray-400 mb-8">Devidas Patil – Advanced Fitness</p>
+                    
+                    <button onclick="showLogin()" class="btn btn-green">📊 View Dashboard</button>
+                    <button onclick="showLogin()" class="btn btn-blue">💪 Workout Plans</button>
+                    <button onclick="showLogin()" class="btn btn-purple">🥗 Diet Plans</button>
+                </div>
+            `;
+        }
+
+        function showLogin() {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <div class="card mt-10">
+                    <h2 class="text-2xl font-bold mb-6 text-center">🔐 Login / Sign Up</h2>
+                    <input id="login-email" class="input-box" type="email" placeholder="Email Address">
+                    <input id="login-pass" class="input-box" type="password" placeholder="Password">
+                    
+                    <select id="login-role" class="input-box">
+                        <option value="client">I am a Client (ग्राहक)</option>
+                        <option value="coach">I am a Coach (कोच)</option>
+                    </select>
+
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="handleLogin()" class="btn btn-green">Login</button>
+                        <button onclick="handleSignup()" class="btn btn-blue">Sign Up</button>
+                    </div>
+                    <button onclick="init()" class="text-gray-400 mt-4 text-sm underline">Back to Home</button>
+                </div>
+            `;
+        }
+
+        function showClientDashboard(app) {
+            let myLogs = workouts.filter(w => w.userId === currentUser.id);
+            
+            let logsHTML = myLogs.map(w => `
+                <div class="bg-slate-700 p-3 rounded mb-2 flex justify-between">
+                    <div>
+                        <div class="font-bold text-emerald-300">${w.exercise}</div>
+                        <div class="text-xs text-gray-400">${w.sets} Sets x ${w.reps} Reps • ${w.kg} kg</div>
+                    </div>
+                    <div class="text-xs text-gray-500">${new Date(w.date).toLocaleDateString()}</div>
+                </div>            `).join('');
+
+            app.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">💪 Hello, Client</h2>
+                    <button onclick="logout()" class="text-red-400 text-sm">Logout</button>
+                </div>
+
+                <div class="card mb-6">
+                    <h3 class="text-lg font-bold mb-4">Log Today's Workout</h3>
+                    <input id="ex-name" class="input-box" placeholder="Exercise Name (e.g. Pushups)">
+                    <div class="flex gap-2">
+                        <input id="ex-sets" class="input-box" type="number" placeholder="Sets">
+                        <input id="ex-reps" class="input-box" type="number" placeholder="Reps">
+                        <input id="ex-kg" class="input-box" type="number" placeholder="Weight">
+                    </div>
+                    <button onclick="addWorkout()" class="btn btn-green mt-2">💾 Save Workout</button>
+                </div>
+
+                <h3 class="text-lg font-bold mb-3">📜 Workout History</h3>
+                <div class="max-h-64 overflow-y-auto">
+                    ${logsHTML || '<p class="text-gray-500 text-center">No workouts yet.</p>'}
+                </div>
+            `;
+        }
+
+        function showCoachDashboard(app) {
+            // Check if this coach has added any clients
+            let myClients = clients.filter(c => c.coachId === currentUser.id);
+            let allLogs = workouts.filter(w => myClients.some(c => c.id === w.userId));
+
+            app.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold text-blue-400">👨‍🏫 Coach Panel</h2>
+                    <button onclick="logout()" class="text-red-400 text-sm">Logout</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-slate-700 p-4 rounded text-center">
+                        <div class="text-2xl font-bold text-white">${myClients.length}</div>
+                        <div class="text-xs text-gray-400">Total Clients</div>
+                    </div>
+                    <div class="bg-slate-700 p-4 rounded text-center">
+                        <div class="text-2xl font-bold text-white">${allLogs.length}</div>
+                        <div class="text-xs text-gray-400">Total Workouts</div>
+                    </div>
+                </div>
+
+                <div class="card mb-6">
+                    <h3 class="text-lg font-bold mb-3">➕ Add New Client</h3>                    <input id="new-client-email" class="input-box" placeholder="Client Email">
+                    <input id="new-client-pass" class="input-box" placeholder="Client Password">
+                    <button onclick="addClient()" class="btn btn-blue">Register Client</button>
+                </div>
+
+                <h3 class="text-lg font-bold mb-3">📊 Client Activity Feed</h3>
+                <div class="max-h-64 overflow-y-auto">
+                    ${allLogs.length ? allLogs.reverse().map(w => {
+                        let clientName = clients.find(c => c.id === w.userId)?.email || 'Unknown';
+                        return `
+                        <div class="bg-slate-700 p-3 rounded mb-2 border-l-4 border-emerald-500">
+                            <div class="font-bold text-emerald-300">${clientName}</div>
+                            <div class="text-sm text-gray-300">Did: ${w.exercise}</div>
+                            <div class="text-xs text-gray-400">${w.sets}x${w.reps} • ${new Date(w.date).toLocaleDateString()}</div>
+                        </div>`;
+                    }).join('') : '<p class="text-gray-500 text-center">No client activity yet.</p>'}
+                </div>
+            `;
+        }
+
+        // --- ACTIONS ---
+
+        function handleSignup() {
+            let email = document.getElementById('login-email').value;
+            let pass = document.getElementById('login-pass').value;
+            let role = document.getElementById('login-role').value;
+
+            if(!email || !pass) return alert("Please fill all fields");
+            if(users.find(u => u.email === email)) return alert("User already exists!");
+
+            let newUser = { id: Date.now(), email, pass, role };
+            users.push(newUser);
+            localStorage.setItem('devfit_users', JSON.stringify(users));
+            
+            alert("Account Created! Now Login.");
+            showLogin();
+        }
+
+        function handleLogin() {
+            let email = document.getElementById('login-email').value;
+            let pass = document.getElementById('login-pass').value;
+
+            let user = users.find(u => u.email === email && u.pass === pass);
+            
+            if (user) {
+                currentUser = user;
+                localStorage.setItem('devfit_current_user', JSON.stringify(user));
+                init();
+            } else {
+                alert("Wrong Email or Password!");            }
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('devfit_current_user');
+            init();
+        }
+
+        function addWorkout() {
+            let ex = document.getElementById('ex-name').value;
+            let sets = document.getElementById('ex-sets').value;
+            let reps = document.getElementById('ex-reps').value;
+            let kg = document.getElementById('ex-kg').value;
+
+            if(!ex || !sets) return alert("Enter exercise details");
+
+            workouts.push({
+                userId: currentUser.id,
+                exercise: ex,
+                sets, reps, kg,
+                date: new Date()
+            });
+            localStorage.setItem('devfit_workouts', JSON.stringify(workouts));
+            
+            // Refresh view
+            init();
+        }
+
+        function addClient() {
+            let email = document.getElementById('new-client-email').value;
+            let pass = document.getElementById('new-client-pass').value;
+
+            if(!email || !pass) return alert("Fill client details");
+
+            // Check if user exists in global users
+            let existing = users.find(u => u.email === email);
+            if(existing) {
+                alert("This email is already registered! Add them directly or ask them to signup.");
+                return;
+            }
+
+            let newClient = { id: Date.now(), email, pass, role: 'client', coachId: currentUser.id };
+            users.push(newClient);
+            clients.push(newClient); // Add to coach's list
+
+            localStorage.setItem('devfit_users', JSON.stringify(users));
+            localStorage.setItem('devfit_clients', JSON.stringify(clients));
+            
+            alert("Client Added Successfully!");            init();
+        }
+
+        // Start App
+        init();
+    </script>
+</body>
+</html>
