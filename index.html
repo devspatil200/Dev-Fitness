@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0"/>
+<title>DevFit Coach – Devidas Patil</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:#f8fafc;-webkit-tap-highlight-color:transparent;max-width:480px;margin:0 auto}
+@keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-10px)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+input,select,button,textarea{font-family:'Segoe UI',sans-serif}
+.fade{animation:fadeIn 0.3s ease}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect}=React;
+const ADMIN_PASS="DEVFIT2024";
+const DP={name:"Devidas Patil",title:"Certified Fitness Coach",location:"Nashik, Maharashtra",
+  experience:"8+ वर्षांचा Gym अनुभव",specialization:"Weight Loss, Muscle Gain, Diabetes, PCOD",
+  certifications:"NIA Insurance Advisor | Fitness Coach | Health Consultant",
+  about:"गेल्या ८+ वर्षांपासून नियमित Fitness सराव करतो. माझ्या clients ना honest आणि practical health guidance देतो.",
+  whatsapp:"9823438787",tagline:"तुमचे आरोग्य — माझी जबाबदारी"};
+const GK={weightloss:"Weight Loss",weightgain:"Muscle Gain",fitness:"General Fitness",diabetes:"Diabetes/BP",energy:"Energy Boost"};
+
+// ── localStorage helpers ──
+function ls(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+
+// ── Groq API ──
+async function callGroq(apiKey,prompt){
+  const res=await fetch("https://api.groq.com/openai/v1/chat/completions",{
+    method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiKey},
+    body:JSON.stringify({model:"llama-3.3-70b-versatile",messages:[{role:"user",content:prompt}],max_tokens:3000,temperature:0.7})
+  });
+  if(!res.ok){const e=await res.json();const msg=e.error?.message||"HTTP "+res.status;if(res.status===429||msg.includes("rate")||msg.includes("quota"))throw new Error("RATE_LIMIT");throw new Error(msg);}
+  const d=await res.json();return d.choices?.[0]?.message?.content||"";
+}
+function parseJSON(raw){const c=raw.replace(/```json|```/g,"").trim();const s=c.indexOf("{");const e=c.lastIndexOf("}");return JSON.parse(s>=0&&e>=0?c.substring(s,e+1):c);}
+
+// ── BMI ──
+function calcBMI(h,w){if(!h||!w)return null;return(parseFloat(w)/Math.pow(parseFloat(h)/100,2)).toFixed(1);}
+function bmiInfo(b){const n=parseFloat(b);if(n<18.5)return{label:"Underweight",color:"#f59e0b"};if(n<25)return{label:"Normal ✅",color:"#16a34a"};if(n<30)return{label:"Overweight",color:"#f97316"};return{label:"Obese",color:"#ef4444"};}
+function daysSince(d){return Math.max(1,Math.floor((new Date()-new Date(d))/86400000)+1);}
+function genCode(){return"DEV"+Math.floor(1000+Math.random()*9000);}
+function waLink(phone,msg){const p=String(phone).startsWith("91")?phone:"91"+phone;return"https://wa.me/"+p+"?text="+encodeURIComponent(msg);}
+
+// ── PDF (English labels only - avoids Marathi encoding issues) ──
+function generatePDF(plan,form,profile){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+  const W=doc.internal.pageSize.getWidth();const M=14;let y=0;
+  function chk(n=20){if(y+n>272){doc.addPage();y=18;}}
+
+  // Header
+  doc.setFillColor(21,128,61);doc.rect(0,0,W,30,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont("helvetica","bold");
+  doc.text("DevFit Coach",M,12);
+  doc.setFontSize(8);doc.setFont("helvetica","normal");
+  doc.text(profile.name+" | "+profile.title+" | "+profile.location,M,18);
+  doc.text("WhatsApp: "+profile.whatsapp,M,23);
+  doc.setFontSize(11);doc.setFont("helvetica","bold");
+  doc.text((plan.programName||"15-Day Health Program"),W-M,18,{align:"right"});
+  y=36;
+
+  // Client box
+  doc.setFillColor(240,253,244);doc.roundedRect(M,y,W-M*2,26,3,3,"FD");
+  doc.setDrawColor(21,128,61);
+  doc.setTextColor(21,128,61);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  doc.text("CLIENT PROFILE",M+4,y+7);
+  doc.setTextColor(55,65,81);doc.setFont("helvetica","normal");doc.setFontSize(8.5);
+  doc.text("Name: "+form.name+"   |   Age: "+form.age+" yrs   |   Gender: "+form.gender,M+4,y+14);
+  doc.text("Height: "+form.height+"cm  |  Weight: "+form.weight+"kg  |  BMI: "+plan.bmi+" ("+plan.bmiCategory+")",M+4,y+19);
+  doc.text("Goal: "+(GK[form.goal]||form.goal)+"   |   Daily Calories: "+(plan.calorieTarget||"—"),M+4,y+24);
+  y+=30;
+
+  // Summary
+  if(plan.summary){doc.setFillColor(254,243,199);doc.roundedRect(M,y,W-M*2,12,2,2,"F");doc.setTextColor(146,64,14);doc.setFontSize(8);doc.setFont("helvetica","italic");const sl=doc.splitTextToSize("Note: "+plan.summary,W-M*2-6);doc.text(sl,M+3,y+5);y+=16;}
+
+  // Diet Table
+  chk(50);
+  doc.setFillColor(21,128,61);doc.rect(M,y,W-M*2,8,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","bold");
+  doc.text("DIET PLAN",M+4,y+5.5);y+=10;
+  const dietRows=(plan.dietTable||[]).map(r=>[r.time,r.meal,r.food,r.quantity,r.calories]);
+  doc.autoTable({startY:y,head:[["Time","Meal","Food / Diet","Quantity","Calories"]],body:dietRows,
+    margin:{left:M,right:M},styles:{fontSize:8,cellPadding:2.5},
+    headStyles:{fillColor:[21,128,61],textColor:255,fontStyle:"bold",fontSize:8.5},
+    alternateRowStyles:{fillColor:[249,250,251]},
+    columnStyles:{0:{cellWidth:17},1:{cellWidth:24},2:{cellWidth:80},3:{cellWidth:24},4:{cellWidth:18}},theme:"grid"});
+  y=doc.lastAutoTable.finalY+8;
+
+  // Do/Don't
+  chk(35);
+  const colW=(W-M*2-4)/2;
+  doc.setFillColor(21,128,61);doc.rect(M,y,colW,7,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  doc.text("DO - Must Follow",M+3,y+5);y+=8;
+  doc.setTextColor(55,65,81);doc.setFont("helvetica","normal");doc.setFontSize(8);
+  const doStartY=y;(plan.doList||[]).forEach(item=>{chk(6);doc.text("• "+item,M+2,y);y+=5;});
+  let rY=doStartY;
+  doc.setFillColor(220,38,38);doc.rect(M+colW+4,doStartY-8,colW,7,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  doc.text("DON'T - Avoid These",M+colW+7,doStartY-3);
+  doc.setTextColor(55,65,81);doc.setFont("helvetica","normal");doc.setFontSize(8);
+  (plan.dontList||[]).forEach(item=>{doc.text("• "+item,M+colW+6,rY);rY+=5;});
+  y=Math.max(y,rY)+6;
+
+  // Workout Table
+  chk(50);
+  doc.setFillColor(30,64,175);doc.rect(M,y,W-M*2,8,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","bold");
+  doc.text("WORKOUT PLAN",M+4,y+5.5);y+=10;
+  const wRows=(plan.workoutTable||[]).map(r=>[r.day,r.focus,r.exercise,r.sets,r.reps,r.rest]);
+  doc.autoTable({startY:y,head:[["Day","Focus","Exercise","Sets","Reps","Rest"]],body:wRows,
+    margin:{left:M,right:M},styles:{fontSize:8,cellPadding:2.5},
+    headStyles:{fillColor:[30,64,175],textColor:255,fontStyle:"bold"},
+    alternateRowStyles:{fillColor:[249,250,251]},
+    columnStyles:{0:{cellWidth:20},1:{cellWidth:30},2:{cellWidth:66},3:{cellWidth:12},4:{cellWidth:16},5:{cellWidth:19}},theme:"grid",
+    didParseCell:(d)=>{if(d.section==="body"&&d.column.index===0&&d.cell.raw){d.cell.styles.fontStyle="bold";d.cell.styles.textColor=[30,64,175];}}});
+  y=doc.lastAutoTable.finalY+8;
+
+  // Motivational
+  if(plan.motivationalNote){chk(18);doc.setFillColor(21,128,61);doc.rect(M,y,W-M*2,14,"F");doc.setTextColor(255,255,255);doc.setFontSize(8.5);doc.setFont("helvetica","italic");const ml=doc.splitTextToSize('"'+plan.motivationalNote+'"',W-M*2-8);doc.text(ml,M+4,y+5);doc.setFont("helvetica","normal");doc.setFontSize(7.5);doc.text("— "+profile.name+", "+profile.location,W-M,y+12,{align:"right"});y+=18;}
+
+  // Footer
+  const pc=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pc;i++){doc.setPage(i);doc.setFillColor(240,253,244);doc.rect(0,286,W,11,"F");doc.setTextColor(21,128,61);doc.setFontSize(7);doc.setFont("helvetica","normal");doc.text("DevFit Coach | "+profile.name+" | "+profile.whatsapp+" | "+profile.location,M,291);doc.text("Page "+i+"/"+pc,W-M,291,{align:"right"});}
+
+  const fn="DevFit_"+form.name.replace(/\s+/g,"_")+"_HealthPlan.pdf";
+  doc.save(fn);return fn;
+}
+
+// ── UI Atoms ──
+function Chip({label,selected,onClick}){return <button onClick={onClick} style={{padding:"9px 14px",borderRadius:"50px",border:`2px solid ${selected?"#16a34a":"#e5e7eb"}`,background:selected?"#16a34a":"#fff",color:selected?"#fff":"#374151",fontWeight:selected?"700":"400",fontSize:"13px",cursor:"pointer"}}>{label}</button>;}
+function OBtn({label,selected,onClick,blue}){const ac=blue?"#1e40af":"#16a34a";return <button onClick={onClick} style={{width:"100%",textAlign:"left",padding:"13px 16px",borderRadius:"12px",border:`2px solid ${selected?ac:"#e5e7eb"}`,background:selected?(blue?"#eff6ff":"#f0fdf4"):"#fff",color:selected?ac:"#374151",fontWeight:selected?"700":"500",fontSize:"14px",cursor:"pointer",marginBottom:"8px"}}>{label}</button>;}
+function F({label,children}){return <div style={{marginBottom:"16px"}}><div style={{fontSize:"14px",fontWeight:"700",color:"#374151",marginBottom:"8px"}}>{label}</div>{children}</div>;}
+function TI({label,...p}){return <F label={label}><input {...p} style={{width:"100%",border:"2px solid #e5e7eb",borderRadius:"12px",padding:"12px 14px",fontSize:"15px",outline:"none",boxSizing:"border-box"}}/></F>;}
+
+// ── MAIN APP ──
+function App(){
+  const[lang,setLang]=useState(()=>ls("dfc_lang","mr"));
+  const[screen,setScreen]=useState("home");
+  const[apiKey,setApiKey]=useState(()=>ls("dfc_groqkey",""));
+  const[apiKeyInput,setApiKeyInput]=useState("");
+  const[apiKeySaved,setApiKeySaved]=useState(false);
+  const[profile,setProfile]=useState(()=>ls("dfc_profile",DP));
+  const[profileEdit,setProfileEdit]=useState(()=>ls("dfc_profile",DP));
+  // Clients with saved plans
+  const[clients,setClients]=useState(()=>ls("dfc_clients2",[]));
+  const[selectedClient,setSelectedClient]=useState(null);
+  // Form
+  const[step,setStep]=useState(1);
+  const[form,setForm]=useState({name:"",age:"",gender:"",height:"",weight:"",goal:"",jobType:"",sleep:"",foodType:"",conditions:[],activity:"",phone:""});
+  const[resultPlan,setResultPlan]=useState(null);
+  const[loading,setLoading]=useState(false);
+  const[loadMsg,setLoadMsg]=useState("");
+  const[planTab,setPlanTab]=useState("diet");
+  const[apiError,setApiError]=useState("");
+  const[pdfLoading,setPdfLoading]=useState(false);
+  // Daily training
+  const[dailyPlan,setDailyPlan]=useState(null);
+  const[dailyDone,setDailyDone]=useState(false);
+  const[dailyTab,setDailyTab]=useState("workout");
+  const[dtDay,setDtDay]=useState(1);
+  // Admin
+  const[adminInput,setAdminInput]=useState("");
+  const[adminAuth,setAdminAuth]=useState(false);
+  const[adminErr,setAdminErr]=useState("");
+  const[adminTab,setAdminTab]=useState("clients");
+
+  useEffect(()=>{lsSet("dfc_lang",lang);},[lang]);
+  useEffect(()=>{lsSet("dfc_clients2",clients);},[clients]);
+  useEffect(()=>{lsSet("dfc_profile",profile);},[profile]);
+
+  const isEN=lang==="en";
+  const L={
+    back:isEN?"← Back":"← मागे", next:isEN?"Next →":"पुढे →",
+    home:isEN?"🏠 Home":"🏠 मुख्यपृष्ठ",
+    generate:isEN?"🚀 Create My Plan!":"🚀 Plan तयार करा!",
+    noKey:isEN?"⚠️ API Key not set. Go Admin → Settings.":"⚠️ API Key set नाही. Admin → Settings मध्ये जा.",
+    errMsg:isEN?"❌ Failed. Check internet.":"❌ चुकी झाली. Internet तपासा.",
+    rateMsg:isEN?"⏳ Rate limit. Wait 1 min and retry.":"⏳ Rate limit. १ मिनिट थांबा आणि पुन्हा try करा.",
+  };
+
+  function toggleCond(key){const c=form.conditions;if(key==="none"){setForm({...form,conditions:["none"]});return;}const f=c.filter(x=>x!=="none");setForm({...form,conditions:f.includes(key)?f.filter(x=>x!==key):[...f,key]});}
+  function canProceed(){
+    if(step===1)return form.name&&form.age&&form.gender&&form.height&&form.weight;
+    if(step===2)return!!form.goal;
+    if(step===3)return form.jobType&&form.sleep&&form.foodType;
+    if(step===4)return form.conditions.length>0&&form.activity;
+    return false;
+  }
+
+  const langI=isEN
+    ?"Write ALL text in English. Use Indian foods. Do NOT use Unicode or non-ASCII characters in JSON string values."
+    :"Write all text in Marathi (Roman script acceptable for exercise names). Use Maharashtra foods: poha, upma, sabudana, bhakri, dal-bhaat, sabzi, chaas, sprouts. IMPORTANT: Use simple ASCII-compatible Marathi or Roman transliteration in JSON to avoid encoding issues.";
+
+  function saveKey(){if(apiKeyInput.trim()){lsSet("dfc_groqkey",apiKeyInput.trim());setApiKey(apiKeyInput.trim());setApiKeySaved(true);setTimeout(()=>setApiKeySaved(false),2500);}}
+
+  async function generateNewPlan(){
+    const key=apiKey||ls("dfc_groqkey","");
+    if(!key){setApiError(L.noKey);return;}
+    setLoading(true);setApiError("");
+    const loadMsgs=isEN?["Analysing details...","Preparing 15-day diet...","Building workout plan..."]:["माहिती तपासत आहे...","१५-दिवस आहार योजना...","Workout वेळापत्रक बनत आहे..."];
+    let mi=0;setLoadMsg(loadMsgs[0]);
+    const iv=setInterval(()=>{mi=(mi+1)%loadMsgs.length;setLoadMsg(loadMsgs[mi]);},1800);
+    const bmi=calcBMI(form.height,form.weight);const code=genCode();
+
+    const prompt=`You are ${profile.name}, ${profile.title} from ${profile.location}. ${langI}
+Client: Name=${form.name}, Age=${form.age}, Gender=${form.gender}, Height=${form.height}cm, Weight=${form.weight}kg, BMI=${bmi}
+Goal=${form.goal}, Job=${form.jobType}, Sleep=${form.sleep}, Food=${form.foodType}
+Medical=${form.conditions.join(",")}, Activity=${form.activity}
+
+Create an honest, safe, practical 15-DAY health plan (NOT 30 days). Be extra careful for medical conditions.
+IMPORTANT: Use only simple ASCII text in all JSON string values. No Unicode symbols or special characters.
+
+Reply ONLY with raw JSON (no markdown, no backticks):
+{"bmiCategory":"...","calorieTarget":"1800 kcal","programName":"15-Day ... Program","summary":"2 honest lines",
+"dietTable":[
+{"meal":"Early Morning","time":"6:00 AM","food":"...","quantity":"1 glass","calories":"~80 kcal"},
+{"meal":"Breakfast","time":"8:00 AM","food":"...","quantity":"1 bowl","calories":"~400 kcal"},
+{"meal":"Mid Morning","time":"11:00 AM","food":"...","quantity":"...","calories":"~150 kcal"},
+{"meal":"Lunch","time":"1:00 PM","food":"...","quantity":"...","calories":"~500 kcal"},
+{"meal":"Evening Snack","time":"4:30 PM","food":"...","quantity":"...","calories":"~200 kcal"},
+{"meal":"Dinner","time":"7:30 PM","food":"...","quantity":"...","calories":"~450 kcal"},
+{"meal":"Bedtime","time":"10:00 PM","food":"...","quantity":"...","calories":"~100 kcal"}
+],
+"workoutTable":[
+{"day":"Day 1","focus":"Full Body Basics","exercise":"Jumping Jacks","sets":"3","reps":"20","rest":"60 sec"},
+{"day":"Day 1","focus":"Full Body Basics","exercise":"Push-ups","sets":"3","reps":"10","rest":"60 sec"},
+{"day":"Day 1","focus":"Full Body Basics","exercise":"Squats","sets":"3","reps":"15","rest":"60 sec"},
+{"day":"Day 2","focus":"Cardio + Core","exercise":"Brisk Walk","sets":"1","reps":"30 min","rest":"—"},
+{"day":"Day 2","focus":"Cardio + Core","exercise":"Crunches","sets":"3","reps":"15","rest":"45 sec"},
+{"day":"Day 3","focus":"Upper Body","exercise":"Dumbbell Press","sets":"3","reps":"12","rest":"60 sec"},
+{"day":"Day 3","focus":"Upper Body","exercise":"Dumbbell Row","sets":"3","reps":"12","rest":"60 sec"},
+{"day":"Day 4","focus":"Legs + Glutes","exercise":"Squats","sets":"3","reps":"15","rest":"60 sec"},
+{"day":"Day 4","focus":"Legs + Glutes","exercise":"Lunges","sets":"3","reps":"12","rest":"60 sec"},
+{"day":"Day 5","focus":"Rest + Stretch","exercise":"Full Body Stretch","sets":"1","reps":"15 min","rest":"—"},
+{"day":"Day 6","focus":"Chest + Triceps","exercise":"Push-ups","sets":"3","reps":"15","rest":"60 sec"},
+{"day":"Day 6","focus":"Chest + Triceps","exercise":"Tricep Dips","sets":"3","reps":"12","rest":"60 sec"},
+{"day":"Day 7","focus":"Back + Biceps","exercise":"Pull-ups / Band Row","sets":"3","reps":"10","rest":"60 sec"},
+{"day":"Day 8","focus":"Cardio","exercise":"Run/Cycle","sets":"1","reps":"30 min","rest":"—"},
+{"day":"Day 9","focus":"Full Body Circuit","exercise":"Burpees","sets":"3","reps":"10","rest":"60 sec"},
+{"day":"Day 9","focus":"Full Body Circuit","exercise":"Mountain Climbers","sets":"3","reps":"20","rest":"45 sec"},
+{"day":"Day 10","focus":"Rest + Yoga","exercise":"Pranayama + Stretching","sets":"1","reps":"20 min","rest":"—"},
+{"day":"Day 11","focus":"Strength","exercise":"Overhead Press","sets":"3","reps":"12","rest":"60 sec"},
+{"day":"Day 12","focus":"Cardio + Core","exercise":"Jump Rope / Jog","sets":"1","reps":"25 min","rest":"—"},
+{"day":"Day 12","focus":"Cardio + Core","exercise":"Plank","sets":"3","reps":"45 sec","rest":"45 sec"},
+{"day":"Day 13","focus":"Lower Body","exercise":"Calf Raises","sets":"3","reps":"20","rest":"45 sec"},
+{"day":"Day 13","focus":"Lower Body","exercise":"Wall Sit","sets":"3","reps":"40 sec","rest":"45 sec"},
+{"day":"Day 14","focus":"Full Body Circuit","exercise":"Jumping Jacks","sets":"3","reps":"25","rest":"45 sec"},
+{"day":"Day 14","focus":"Full Body Circuit","exercise":"Push-ups","sets":"3","reps":"15","rest":"60 sec"},
+{"day":"Day 15","focus":"Review + Rest","exercise":"Light Walk + Stretch","sets":"1","reps":"20 min","rest":"—"}
+],
+"phases":[
+{"week":"Day 1-5","theme":"Foundation","desc":"Build habit, easy start","diet":"Strict diet, no junk"},
+{"week":"Day 6-10","theme":"Building","desc":"Increase intensity","diet":"Add protein sources"},
+{"week":"Day 11-15","theme":"Peak","desc":"Full effort, see results","diet":"Maintain consistency"}
+],
+"doList":["Drink 3L water daily","Eat every 3-4 hours","Sleep 7-8 hours","Weigh yourself on Day 1 and Day 15","Exercise at same time daily"],
+"dontList":["Skip meals","Eat outside junk food","Skip workout without reason","Sleep immediately after eating","Overeat on weekends"],
+"motivationalNote":"Genuine caring message for ${form.name} related to goal: ${form.goal}"}`;
+
+    try{
+      const raw=await callGroq(key,prompt);
+      const parsed=parseJSON(raw);
+      const planObj={...parsed,bmi,code,savedAt:new Date().toISOString()};
+      setResultPlan(planObj);
+      setPlanTab("diet");
+      // Auto-save client with plan
+      const newClient={
+        id:Date.now(),code,name:form.name,phone:form.phone||"",
+        age:form.age,gender:form.gender,height:form.height,weight:form.weight,
+        goal:form.goal,foodType:form.foodType,conditions:form.conditions,
+        planType:"15day",amount:699,
+        startDate:new Date().toISOString().split("T")[0],
+        status:"active",plan:planObj,
+        completedDays:[],checkIns:[]
+      };
+      const updated=[newClient,...clients.filter(c=>c.name!==form.name)];
+      setClients(updated);
+      setScreen("plan-result");
+    }catch(e){
+      const isRate=e.message&&(e.message.includes("RATE_LIMIT")||e.message.includes("rate")||e.message.includes("quota"));
+      setApiError(isRate?L.rateMsg:L.errMsg+" ("+e.message+")");
+      setScreen("new-client");
+    }finally{clearInterval(iv);setLoading(false);}
+  }
+
+  async function getDailyPlanForClient(client,day){
+    const key=apiKey||ls("dfc_groqkey","");
+    if(!key){setApiError(L.noKey);return;}
+    setLoading(true);setApiError("");setLoadMsg(isEN?"Building Day "+day+" plan...":"Day "+day+" चा plan तयार होत आहे...");
+    const prompt=`You are ${profile.name}, ${profile.title}. Write in English only. Use Indian foods.
+Client: ${client.name}, Age:${client.age}, Goal:${client.goal}, Food:${client.foodType}
+Today is Day ${day} of 15-day program.
+IMPORTANT: Use only ASCII text in all JSON values.
+Reply ONLY raw JSON:
+{"day":${day},"workout":{"warmup":"5 min warmup","exercises":["Exercise1 - 3x12","Exercise2 - 3x10","Exercise3 - 3x15"],"cooldown":"5 min stretch","duration":"40 min","tip":"practical tip"},"diet":{"earlyMorning":"...","breakfast":"Indian breakfast...","lunch":"Indian lunch...","eveningSnack":"...","dinner":"Indian dinner..."},"motivation":"Short encouraging message for Day ${day}"}`;
+    try{
+      const raw=await callGroq(key,prompt);
+      const parsed=parseJSON(raw);
+      setDailyPlan({...parsed,clientName:client.name,code:client.code});
+      setDailyDone(false);setDailyTab("workout");setDtDay(day);
+      setScreen("daily-result");
+    }catch(e){
+      const isRate=e.message&&(e.message.includes("RATE_LIMIT")||e.message.includes("rate"));
+      setApiError(isRate?L.rateMsg:L.errMsg+" ("+e.message+")");
+    }finally{setLoading(false);}
+  }
+
+  function markDayDone(clientCode,day){
+    const updated=clients.map(c=>{
+      if(c.code!==clientCode)return c;
+      const done=c.completedDays||[];
+      if(done.includes(day))return c;
+      return{...c,completedDays:[...done,day],checkIns:[...( c.checkIns||[]),{day,date:new Date().toISOString()}]};
+    });
+    setClients(updated);
+  }
+
+  function LT(){return <button onClick={()=>setLang(l=>l==="en"?"mr":"en")} style={{background:"rgba(255,255,255,0.2)",border:"2px solid rgba(255,255,255,0.4)",borderRadius:"20px",padding:"6px 14px",color:"#fff",fontWeight:"700",fontSize:"13px",cursor:"pointer"}}>{lang==="en"?"मराठी":"EN"}</button>;}
+  function Err(){return apiError?<div className="fade" style={{background:"#fef2f2",border:"1px solid #fecaca",color:"#b91c1c",borderRadius:"12px",padding:"12px 16px",marginBottom:"16px",fontSize:"13px",lineHeight:"1.6"}}>{apiError}<br/><button onClick={()=>setApiError("")} style={{marginTop:"6px",fontSize:"12px",background:"none",border:"none",color:"#b91c1c",cursor:"pointer",textDecoration:"underline"}}>Dismiss</button></div>:null;}
+
+  // ── LOADING ──
+  if(loading)return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#14532d,#15803d)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",padding:"32px 20px"}}>
+      <div style={{fontSize:"52px",marginBottom:"16px"}}>💚</div>
+      <h2 style={{color:"#fff",fontSize:"20px",margin:"0 0 6px",fontWeight:"800"}}>{isEN?"Creating Your Plan":"तुमचा Plan तयार होत आहे"}</h2>
+      <p style={{color:"#d1fae5",fontSize:"14px",minHeight:"22px"}}>{loadMsg}</p>
+      <div style={{display:"flex",gap:"8px",marginTop:"20px"}}>{[0,1,2].map(i=><div key={i} style={{width:"10px",height:"10px",borderRadius:"50%",background:"#fff",animation:`bounce 0.8s ${i*0.15}s infinite alternate`}}/>)}</div>
+    </div>
+  );
+
+  // ── HOME ──
+  if(screen==="home")return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#14532d,#166534,#15803d)",display:"flex",flexDirection:"column",padding:"0 0 32px",color:"#fff",position:"relative"}}>
+      <div style={{position:"absolute",top:"16px",right:"16px",zIndex:10}}><LT/></div>
+
+      {/* Coach Card */}
+      <div style={{padding:"44px 20px 20px",textAlign:"center"}}>
+        <div style={{width:"80px",height:"80px",borderRadius:"50%",background:"rgba(255,255,255,0.2)",border:"3px solid rgba(255,255,255,0.5)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"36px",margin:"0 auto 12px",boxShadow:"0 4px 16px rgba(0,0,0,0.2)"}}>💪</div>
+        <h1 style={{fontSize:"24px",fontWeight:"900",margin:"0 0 4px"}}>{profile.name}</h1>
+        <p style={{color:"#86efac",fontSize:"14px",fontWeight:"700",margin:"0 0 3px"}}>{profile.title}</p>
+        <p style={{color:"#d1fae5",fontSize:"12px",margin:"0 0 12px"}}>📍 {profile.location}</p>
+        {profile.tagline&&<div style={{background:"rgba(255,255,255,0.12)",borderRadius:"12px",padding:"8px 16px",display:"inline-block",fontSize:"13px",color:"#d1fae5",fontStyle:"italic",marginBottom:"12px"}}>"{profile.tagline}"</div>}
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:"6px",marginBottom:"8px"}}>
+          {profile.experience&&<span style={{background:"rgba(255,255,255,0.15)",borderRadius:"50px",padding:"4px 12px",fontSize:"12px"}}>🏋️ {profile.experience}</span>}
+          {(profile.specialization||"").split(",").slice(0,3).map((s,i)=><span key={i} style={{background:"rgba(255,255,255,0.12)",borderRadius:"50px",padding:"4px 12px",fontSize:"12px"}}>{s.trim()}</span>)}
+        </div>
+      </div>
+
+      {/* Trust Badges */}
+      <div style={{margin:"0 16px 16px",background:"rgba(255,255,255,0.1)",borderRadius:"16px",padding:"14px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+          {[
+            ["✅","Honest Guidance","प्रामाणिक मार्गदर्शन"],
+            ["🥗","100% Indian Diet","भारतीय आहार"],
+            ["📊","Progress Tracking","Progress Track"],
+            ["📄","PDF Plan","Download करा"],
+          ].map(([icon,en,mr])=>(
+            <div key={en} style={{display:"flex",alignItems:"center",gap:"8px"}}>
+              <span style={{fontSize:"16px"}}>{icon}</span>
+              <span style={{fontSize:"12px",color:"#d1fae5"}}>{isEN?en:mr}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Testimonials */}
+      <div style={{margin:"0 16px 16px"}}>
+        <div style={{fontSize:"12px",color:"#86efac",fontWeight:"700",marginBottom:"8px",textAlign:"center"}}>⭐ {isEN?"Client Results":"Client Results"}</div>
+        <div style={{display:"flex",gap:"10px",overflowX:"auto",paddingBottom:"4px"}}>
+          {[
+            {name:"Rahul D.",result:isEN?"-6 kg in 15 days":"15 दिवसांत -6 kg",star:"⭐⭐⭐⭐⭐"},
+            {name:"Priya K.",result:isEN?"Energy improved":"Energy सुधारली",star:"⭐⭐⭐⭐⭐"},
+            {name:"Suresh J.",result:isEN?"BP under control":"BP नियंत्रणात",star:"⭐⭐⭐⭐⭐"},
+          ].map((t,i)=>(
+            <div key={i} style={{background:"rgba(255,255,255,0.12)",borderRadius:"12px",padding:"10px 12px",minWidth:"130px",flexShrink:0}}>
+              <div style={{fontSize:"11px",fontWeight:"700",color:"#fff"}}>{t.name}</div>
+              <div style={{fontSize:"10px",color:"#d1fae5",marginTop:"2px"}}>{t.result}</div>
+              <div style={{fontSize:"10px",marginTop:"4px"}}>{t.star}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Menu */}
+      <div style={{padding:"0 16px",display:"flex",flexDirection:"column",gap:"10px"}}>
+        {!apiKey&&<div style={{background:"rgba(254,243,199,0.95)",borderRadius:"12px",padding:"10px 14px",color:"#92400e",fontSize:"13px"}}>⚠️ {L.noKey}</div>}
+        <button onClick={()=>{setScreen("new-client");setStep(1);setForm({name:"",age:"",gender:"",height:"",weight:"",goal:"",jobType:"",sleep:"",foodType:"",conditions:[],activity:"",phone:""});setApiError("");}} style={{background:"#fff",color:"#15803d",border:"none",borderRadius:"16px",padding:"16px 20px",fontSize:"15px",fontWeight:"800",cursor:"pointer",textAlign:"left",boxShadow:"0 4px 20px rgba(0,0,0,0.2)"}}>
+          🆕 {isEN?"New Client — Get 15-Day Plan":"नवीन क्लायंट — १५-दिवस Plan"}
+          <div style={{fontSize:"12px",fontWeight:"400",color:"#6b7280",marginTop:"2px"}}>{isEN?"Fill details → Personalized Diet + Workout":"माहिती भरा → वैयक्तिक आहार + Workout"}</div>
+        </button>
+        <button onClick={()=>{setScreen("client-list");setApiError("");}} style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"2px solid rgba(255,255,255,0.3)",borderRadius:"16px",padding:"16px 20px",fontSize:"15px",fontWeight:"700",cursor:"pointer",textAlign:"left"}}>
+          👥 {isEN?"My Clients — Daily Training":"माझे Clients — Daily Training"}
+          <div style={{fontSize:"12px",fontWeight:"400",color:"#d1fae5",marginTop:"2px"}}>{isEN?"View saved clients, send daily plan":"Saved clients पाहा, आजचा plan द्या"}</div>
+        </button>
+        <button onClick={()=>{setScreen("admin");setAdminAuth(false);setAdminInput("");}} style={{background:"rgba(255,255,255,0.08)",color:"#d1fae5",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"16px",padding:"16px 20px",fontSize:"15px",fontWeight:"600",cursor:"pointer",textAlign:"left"}}>
+          🔐 {isEN?"Admin Panel":"Admin Panel"}
+          <div style={{fontSize:"12px",fontWeight:"400",color:"#86efac",marginTop:"2px"}}>{isEN?"Clients, Revenue, Settings, Profile":"Clients, Revenue, Settings, Profile"}</div>
+        </button>
+      </div>
+      <div style={{display:"flex",justifyContent:"center",gap:"24px",marginTop:"20px"}}>
+        {[["₹699","15-Day"],["₹1,499",isEN?"Monthly":"मासिक"],["15",isEN?"Day Program":"दिवस Program"]].map(([v,l])=>(
+          <div key={l} style={{textAlign:"center"}}><div style={{fontSize:"15px",fontWeight:"800"}}>{v}</div><div style={{fontSize:"11px",color:"#86efac"}}>{l}</div></div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── CLIENT LIST ──
+  if(screen==="client-list")return(
+    <div style={{minHeight:"100vh",background:"#f8fafc"}}>
+      <div style={{background:"linear-gradient(135deg,#1e40af,#3b82f6)",padding:"18px 16px",color:"#fff"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div><button onClick={()=>setScreen("home")} style={{background:"none",border:"none",color:"rgba(255,255,255,0.8)",fontSize:"14px",cursor:"pointer",padding:0,marginBottom:"4px",display:"block"}}>{L.back}</button>
+          <h2 style={{margin:0,fontSize:"18px",fontWeight:"700"}}>👥 {isEN?"My Clients":"माझे Clients"}</h2></div><LT/>
+        </div>
+      </div>
+      <div style={{padding:"16px"}}>
+        <Err/>
+        {clients.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"#9ca3af"}}>
+          <div style={{fontSize:"40px",marginBottom:"12px"}}>👥</div>
+          <p style={{fontSize:"15px"}}>{isEN?"No clients yet. Create a new plan!":"अजून कोणताही client नाही."}</p>
+          <button onClick={()=>{setScreen("new-client");setStep(1);setForm({name:"",age:"",gender:"",height:"",weight:"",goal:"",jobType:"",sleep:"",foodType:"",conditions:[],activity:"",phone:""});}} style={{marginTop:"16px",background:"#15803d",border:"none",borderRadius:"12px",padding:"12px 24px",color:"#fff",fontWeight:"700",cursor:"pointer",fontSize:"14px"}}>🆕 {isEN?"New Client":"नवीन Client"}</button>
+        </div>}
+        <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+          {clients.map(c=>{
+            const d=Math.min(daysSince(c.startDate),15);
+            const completed=c.completedDays||[];
+            const pct=Math.round(completed.length/15*100);
+            return(
+              <div key={c.id} style={{background:"#fff",borderRadius:"16px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+                  <div>
+                    <div style={{fontWeight:"700",fontSize:"16px",color:"#374151"}}>{c.name}</div>
+                    <div style={{fontSize:"12px",color:"#6b7280"}}>🎯 {GK[c.goal]||c.goal} • BMI: {c.plan?.bmi}</div>
+                    <div style={{fontSize:"11px",color:"#9ca3af",marginTop:"2px"}}>🔑 {c.code} • Started: {c.startDate}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:"13px",fontWeight:"700",color:"#15803d"}}>{completed.length}/15 {isEN?"days":"दिवस"}</div>
+                    <div style={{fontSize:"11px",color:pct>=80?"#16a34a":pct>=40?"#f97316":"#6b7280",fontWeight:"600"}}>{pct}% {isEN?"done":"पूर्ण"}</div>
+                  </div>
+                </div>
+
+                {/* Progress bar */}
+                <div style={{background:"#f3f4f6",borderRadius:"6px",height:"8px",overflow:"hidden",marginBottom:"10px"}}>
+                  <div style={{background:pct>=80?"#16a34a":pct>=40?"#f97316":"#3b82f6",height:"100%",width:pct+"%",borderRadius:"6px",transition:"width 0.5s"}}/>
+                </div>
+
+                {/* Day chips - show all 15 days */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:"5px",marginBottom:"12px"}}>
+                  {Array.from({length:15},(_,i)=>{
+                    const dayNum=i+1;const done=completed.includes(dayNum);const isToday=dayNum===d;
+                    return <button key={dayNum} onClick={()=>{setSelectedClient(c);getDailyPlanForClient(c,dayNum);}} style={{width:"32px",height:"32px",borderRadius:"8px",border:"none",background:done?"#16a34a":isToday?"#3b82f6":"#f3f4f6",color:done||isToday?"#fff":"#374151",fontSize:"12px",fontWeight:"700",cursor:"pointer",position:"relative"}}>
+                      {dayNum}{isToday&&!done&&<span style={{position:"absolute",top:"-3px",right:"-3px",width:"8px",height:"8px",background:"#f97316",borderRadius:"50%"}}/>}
+                    </button>;
+                  })}
+                </div>
+
+                {/* Actions */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
+                  <button onClick={()=>{setSelectedClient(c);getDailyPlanForClient(c,d);}} style={{background:"#1e40af",border:"none",borderRadius:"10px",padding:"10px",color:"#fff",fontWeight:"600",fontSize:"13px",cursor:"pointer"}}>
+                    📅 Day {d} {isEN?"Plan":"Plan"}
+                  </button>
+                  <button onClick={()=>{setResultPlan(c.plan);setForm({name:c.name,age:c.age,gender:c.gender,height:c.height,weight:c.weight,goal:c.goal,foodType:c.foodType,conditions:c.conditions||[],jobType:"",sleep:"",activity:""});setPlanTab("diet");setScreen("plan-result");}} style={{background:"#15803d",border:"none",borderRadius:"10px",padding:"10px",color:"#fff",fontWeight:"600",fontSize:"13px",cursor:"pointer"}}>
+                    📋 {isEN?"View Plan":"Plan पाहा"}
+                  </button>
+                </div>
+                {c.phone&&<a href={waLink("91"+c.phone,`Hello ${c.name}! DevFit Day ${d}/15 update - how are you doing? - ${profile.name} ${profile.whatsapp}`)} style={{display:"block",marginTop:"8px",background:"#f0fdf4",color:"#15803d",fontWeight:"600",fontSize:"13px",padding:"8px",borderRadius:"10px",textDecoration:"none",textAlign:"center"}}>📱 WhatsApp {c.name}</a>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── NEW CLIENT FORM ──
+  if(screen==="new-client"){
+    const bmi=calcBMI(form.height,form.weight);const bi=bmi?bmiInfo(bmi):null;
+    const steps=isEN?["Personal Info","Your Goal","Lifestyle & Diet","Health Details"]:["वैयक्तिक माहिती","आपले ध्येय","जीवनशैली व आहार","आरोग्य स्थिती"];
+    const goals=isEN?[{k:"weightloss",l:"⚖️ Weight Loss"},{k:"weightgain",l:"💪 Muscle / Weight Gain"},{k:"fitness",l:"🏃 General Fitness"},{k:"diabetes",l:"🩺 Diabetes / BP Control"},{k:"energy",l:"⚡ Energy Boost"}]:[{k:"weightloss",l:"⚖️ वजन कमी करणे"},{k:"weightgain",l:"💪 Muscle / वजन वाढवणे"},{k:"fitness",l:"🏃 सामान्य फिटनेस"},{k:"diabetes",l:"🩺 Diabetes / BP नियंत्रण"},{k:"energy",l:"⚡ उर्जा वाढवणे"}];
+    const jobs=isEN?[{k:"sedentary",l:"💻 Desk/Office Work"},{k:"standing",l:"🚶 Standing/Walking"},{k:"physical",l:"🏗️ Heavy Physical"}]:[{k:"sedentary",l:"💻 बसून काम"},{k:"standing",l:"🚶 उभे काम"},{k:"physical",l:"🏗️ शारीरिक काम"}];
+    const sleeps=isEN?[{k:"5-6h",l:"😴 5-6 hrs"},{k:"7-8h",l:"😊 7-8 hrs"},{k:"8h+",l:"🌙 8+ hrs"}]:[{k:"5-6h",l:"😴 ५-६ तास"},{k:"7-8h",l:"😊 ७-८ तास"},{k:"8h+",l:"🌙 ८+ तास"}];
+    const foods=isEN?[{k:"veg",l:"🥗 Vegetarian"},{k:"eggetarian",l:"🥚 Eggetarian"},{k:"nonveg",l:"🍗 Non-Vegetarian"}]:[{k:"veg",l:"🥗 शाकाहारी"},{k:"eggetarian",l:"🥚 अंडी + शाकाहार"},{k:"nonveg",l:"🍗 मांसाहारी"}];
+    const conds=isEN?[{k:"none",l:"✅ None"},{k:"diabetes",l:"🩸 Diabetes"},{k:"bp",l:"💊 BP"},{k:"thyroid",l:"🦋 Thyroid"},{k:"pcod",l:"🔴 PCOD"},{k:"knee",l:"🦵 Knee Pain"},{k:"back",l:"🔙 Back Pain"},{k:"gastric",l:"🫃 Gastric"}]:[{k:"none",l:"✅ काहीही नाही"},{k:"diabetes",l:"🩸 Diabetes"},{k:"bp",l:"💊 BP"},{k:"thyroid",l:"🦋 Thyroid"},{k:"pcod",l:"🔴 PCOD"},{k:"knee",l:"🦵 गुडघेदुखी"},{k:"back",l:"🔙 पाठदुखी"},{k:"gastric",l:"🫃 Gastric"}];
+    const acts=isEN?[{k:"none",l:"🛋️ No Exercise"},{k:"walk",l:"🚶 Only Walking"},{k:"yoga",l:"🧘 Yoga"},{k:"gym",l:"💪 Gym (Beginner)"},{k:"gymreg",l:"🏋️ Gym (Regular)"}]:[{k:"none",l:"🛋️ अजिबात नाही"},{k:"walk",l:"🚶 फक्त चालणे"},{k:"yoga",l:"🧘 Yoga"},{k:"gym",l:"💪 Gym (नवीन)"},{k:"gymreg",l:"🏋️ Gym (नियमित)"}];
+    return(
+      <div style={{minHeight:"100vh",background:"#f8fafc"}}>
+        <div style={{background:"linear-gradient(135deg,#14532d,#16a34a)",padding:"18px 16px 14px",color:"#fff"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+            <div><h2 style={{margin:0,fontSize:"17px",fontWeight:"700"}}>{steps[step-1]}</h2><p style={{margin:0,fontSize:"12px",color:"#86efac"}}>Step {step}/4</p></div><LT/>
+          </div>
+          <div style={{display:"flex",gap:"4px"}}>{[0,1,2,3].map(i=><div key={i} style={{flex:1,height:"4px",borderRadius:"4px",background:i<step?"#fff":"rgba(255,255,255,0.25)"}}/>)}</div>
+        </div>
+        <div style={{padding:"20px 16px"}}>
+          <Err/>
+          {step===1&&<div>
+            <TI label={isEN?"Full Name":"पूर्ण नाव"} type="text" placeholder={isEN?"e.g. Rahul Deshmukh":"उदा. राहुल देशमुख"} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
+            <TI label={isEN?"Phone (optional)":"Phone (optional)"} type="tel" placeholder="9876543210" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+              <TI label={isEN?"Age":"वय"} type="number" placeholder="35" value={form.age} onChange={e=>setForm({...form,age:e.target.value})}/>
+              <F label={isEN?"Gender":"लिंग"}><div style={{display:"flex",gap:"8px"}}>{[{k:"Male",l:isEN?"👨 Male":"👨 पुरुष"},{k:"Female",l:isEN?"👩 Female":"👩 स्त्री"}].map(({k,l})=><button key={k} onClick={()=>setForm({...form,gender:k})} style={{flex:1,padding:"11px 4px",border:`2px solid ${form.gender===k?"#16a34a":"#e5e7eb"}`,borderRadius:"12px",background:form.gender===k?"#16a34a":"#fff",color:form.gender===k?"#fff":"#374151",fontWeight:"600",fontSize:"12px",cursor:"pointer"}}>{l}</button>)}</div></F>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px"}}>
+              <TI label={isEN?"Height (cm)":"उंची (cm)"} type="number" placeholder="168" value={form.height} onChange={e=>setForm({...form,height:e.target.value})}/>
+              <TI label={isEN?"Weight (kg)":"वजन (kg)"} type="number" placeholder="72" value={form.weight} onChange={e=>setForm({...form,weight:e.target.value})}/>
+            </div>
+            {bmi&&<div style={{background:"#f0fdf4",borderRadius:"12px",padding:"10px 14px",textAlign:"center",fontSize:"14px",border:`1px solid ${bi.color}40`}}>BMI: <strong>{bmi}</strong> — <strong style={{color:bi.color}}>{bi.label}</strong></div>}
+          </div>}
+          {step===2&&<div>{goals.map(g=><OBtn key={g.k} label={g.l} selected={form.goal===g.k} onClick={()=>setForm({...form,goal:g.k})}/>)}</div>}
+          {step===3&&<div>
+            <F label={isEN?"Work type?":"काम कसले?"}>{jobs.map(j=><OBtn key={j.k} label={j.l} selected={form.jobType===j.k} onClick={()=>setForm({...form,jobType:j.k})}/>)}</F>
+            <F label={isEN?"Daily sleep?":"दररोज झोप?"}><div style={{display:"flex",gap:"8px"}}>{sleeps.map(s=><Chip key={s.k} label={s.l} selected={form.sleep===s.k} onClick={()=>setForm({...form,sleep:s.k})}/>)}</div></F>
+            <F label={isEN?"Diet type":"आहार पद्धती"}>{foods.map(f=><OBtn key={f.k} label={f.l} selected={form.foodType===f.k} onClick={()=>setForm({...form,foodType:f.k})}/>)}</F>
+          </div>}
+          {step===4&&<div>
+            <F label={isEN?"Health conditions":"आरोग्य समस्या"}><div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>{conds.map(c=><Chip key={c.k} label={c.l} selected={form.conditions.includes(c.k)} onClick={()=>toggleCond(c.k)}/>)}</div></F>
+            <F label={isEN?"Current activity":"सध्याचा व्यायाम"}>{acts.map(a=><OBtn key={a.k} label={a.l} selected={form.activity===a.k} onClick={()=>setForm({...form,activity:a.k})}/>)}</F>
+          </div>}
+          <div style={{display:"flex",gap:"10px",marginTop:"20px"}}>
+            <button onClick={()=>step>1?setStep(step-1):setScreen("home")} style={{flex:1,background:"#f3f4f6",border:"none",borderRadius:"14px",padding:"15px",color:"#6b7280",fontSize:"15px",fontWeight:"600",cursor:"pointer"}}>{L.back}</button>
+            {step<4?<button onClick={()=>canProceed()&&setStep(step+1)} disabled={!canProceed()} style={{flex:2,border:"none",borderRadius:"14px",padding:"15px",fontSize:"15px",fontWeight:"700",cursor:canProceed()?"pointer":"not-allowed",background:canProceed()?"#15803d":"#d1d5db",color:"#fff"}}>{L.next}</button>
+            :<button onClick={()=>canProceed()&&generateNewPlan()} disabled={!canProceed()} style={{flex:2,border:"none",borderRadius:"14px",padding:"15px",fontSize:"15px",fontWeight:"700",cursor:canProceed()?"pointer":"not-allowed",background:canProceed()?"#15803d":"#d1d5db",color:"#fff"}}>{L.generate}</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── PLAN RESULT ──
+  if(screen==="plan-result"&&resultPlan){
+    const bi=bmiInfo(resultPlan.bmi);const code=resultPlan.code||"—";
+    const waMsg=`Hello ${form.name}!\nYour 15-Day DevFit Health Plan is ready.\nClient Code: ${code}\nGoal: ${GK[form.goal]||form.goal} | BMI: ${resultPlan.bmi}\nAsk me for your daily workout + diet plan each day!\nQuestions? WhatsApp: ${profile.whatsapp}\n- ${profile.name}, ${profile.location}`;
+    return(
+      <div style={{background:"#f8fafc",minHeight:"100vh",paddingBottom:"32px"}}>
+        <div style={{background:"linear-gradient(135deg,#14532d,#16a34a)",padding:"20px 16px",color:"#fff"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"10px"}}><div style={{fontSize:"32px"}}>🎉</div><div><h1 style={{margin:0,fontSize:"17px",fontWeight:"700"}}>{form.name} — Plan Ready!</h1><p style={{margin:0,fontSize:"12px",color:"#86efac"}}>{profile.name} • {profile.location}</p></div></div><LT/>
+          </div>
+          <div style={{background:"rgba(255,255,255,0.15)",borderRadius:"14px",padding:"14px",textAlign:"center",marginBottom:"12px"}}>
+            <div style={{fontSize:"12px",color:"#d1fae5",marginBottom:"4px"}}>🔑 {isEN?"Client Code":"क्लायंट कोड"}</div>
+            <div style={{fontSize:"28px",fontWeight:"900",letterSpacing:"6px"}}>{code}</div>
+            <div style={{fontSize:"11px",color:"#86efac",marginTop:"2px"}}>{isEN?"Saved! Use for daily training tracking.":"Saved! दैनिक training साठी हा code वापरा."}</div>
+          </div>
+          <div style={{display:"flex",gap:"8px"}}>
+            {[["BMI",resultPlan.bmi],["Status",bi.label],["Calories",resultPlan.calorieTarget||"—"]].map(([l,v])=>(
+              <div key={l} style={{flex:1,background:"rgba(255,255,255,0.12)",borderRadius:"10px",padding:"10px 6px",textAlign:"center"}}><div style={{fontSize:"13px",fontWeight:"700"}}>{v}</div><div style={{fontSize:"10px",color:"rgba(255,255,255,0.7)",marginTop:"1px"}}>{l}</div></div>
+            ))}
+          </div>
+          {resultPlan.summary&&<p style={{fontSize:"13px",color:"#d1fae5",marginTop:"10px",lineHeight:"1.5"}}>💡 {resultPlan.summary}</p>}
+        </div>
+
+        <div style={{display:"flex",background:"#fff",borderBottom:"2px solid #e5e7eb"}}>
+          {[["diet","🥗 Diet"],["workout","🏋️ Workout"],["tips","📋 Rules"],["phases","📅 Schedule"]].map(([k,lb])=>(
+            <button key={k} onClick={()=>setPlanTab(k)} style={{flex:1,padding:"12px 2px",border:"none",background:"none",fontSize:"11px",fontWeight:planTab===k?"700":"500",color:planTab===k?"#15803d":"#6b7280",borderBottom:`2px solid ${planTab===k?"#15803d":"transparent"}`,cursor:"pointer",marginBottom:"-2px"}}>{lb}</button>
+          ))}
+        </div>
+
+        <div style={{padding:"16px"}}>
+          {planTab==="diet"&&<div>
+            <div style={{background:"#fef3c7",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px",fontSize:"13px",color:"#92400e"}}>📌 {isEN?"Diet made personally for you. Follow every day.":"हा आहार तुमच्यासाठी वैयक्तिकरित्या तयार केला. दररोज हाच पाळा."}</div>
+            <div style={{background:"#fff",borderRadius:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                  <thead><tr style={{background:"#f0fdf4"}}>
+                    {["Time","Meal","Food","Qty","Cal"].map((h,i)=><th key={i} style={{padding:"10px 8px",textAlign:"left",fontWeight:"700",color:"#15803d",borderBottom:"2px solid #d1fae5",whiteSpace:"nowrap"}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {(resultPlan.dietTable||[]).map((row,i)=>(
+                      <tr key={i} style={{background:i%2===0?"#fff":"#f9fafb",borderBottom:"1px solid #f3f4f6"}}>
+                        <td style={{padding:"9px 8px",color:"#6b7280",whiteSpace:"nowrap",fontSize:"11px"}}>{row.time}</td>
+                        <td style={{padding:"9px 8px",fontWeight:"600",color:"#374151",whiteSpace:"nowrap"}}>{row.meal}</td>
+                        <td style={{padding:"9px 8px",color:"#374151",lineHeight:"1.4"}}>{row.food}</td>
+                        <td style={{padding:"9px 8px",color:"#6b7280",whiteSpace:"nowrap",fontSize:"11px"}}>{row.quantity}</td>
+                        <td style={{padding:"9px 8px",color:"#16a34a",fontWeight:"600",whiteSpace:"nowrap",fontSize:"11px"}}>{row.calories}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>}
+
+          {planTab==="workout"&&<div>
+            <div style={{background:"#eff6ff",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px",fontSize:"13px",color:"#1e40af"}}>📌 {isEN?"15-day program. Follow schedule below.":"१५-दिवस program. खालील schedule follow करा."}</div>
+            <div style={{background:"#fff",borderRadius:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:"12px"}}>
+                  <thead><tr style={{background:"#eff6ff"}}>
+                    {["Day","Focus","Exercise","Sets","Reps","Rest"].map((h,i)=><th key={i} style={{padding:"9px 8px",textAlign:"left",fontWeight:"700",color:"#1e40af",borderBottom:"2px solid #dbeafe",whiteSpace:"nowrap"}}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {(resultPlan.workoutTable||[]).map((row,i)=>{
+                      const prev=i>0?resultPlan.workoutTable[i-1].day:"";
+                      const isNew=row.day!==prev;
+                      return <tr key={i} style={{background:isNew?"#f0f9ff":i%2===0?"#fff":"#f9fafb",borderBottom:"1px solid #f3f4f6",borderTop:isNew?"2px solid #dbeafe":"none"}}>
+                        <td style={{padding:"8px",fontWeight:isNew?"700":"400",color:isNew?"#1e40af":"#9ca3af",whiteSpace:"nowrap",fontSize:"11px"}}>{isNew?row.day:""}</td>
+                        <td style={{padding:"8px",color:"#6b7280",fontSize:"11px"}}>{isNew?row.focus:""}</td>
+                        <td style={{padding:"8px",fontWeight:"500",color:"#374151"}}>{row.exercise}</td>
+                        <td style={{padding:"8px",textAlign:"center",color:"#1e40af",fontWeight:"700"}}>{row.sets}</td>
+                        <td style={{padding:"8px",textAlign:"center",color:"#374151"}}>{row.reps}</td>
+                        <td style={{padding:"8px",textAlign:"center",color:"#6b7280",fontSize:"11px"}}>{row.rest}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>}
+
+          {planTab==="tips"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+            <div style={{background:"#fff",borderRadius:"14px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+              <div style={{fontWeight:"700",color:"#16a34a",marginBottom:"10px",fontSize:"14px"}}>✅ {isEN?"Must Do":"हे नक्की करा"}</div>
+              {(resultPlan.doList||[]).map((r,i)=><p key={i} style={{margin:"0 0 7px",fontSize:"14px",color:"#374151"}}>• {r}</p>)}
+            </div>
+            <div style={{background:"#fff",borderRadius:"14px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+              <div style={{fontWeight:"700",color:"#ef4444",marginBottom:"10px",fontSize:"14px"}}>❌ {isEN?"Avoid These":"हे टाळा"}</div>
+              {(resultPlan.dontList||[]).map((r,i)=><p key={i} style={{margin:"0 0 7px",fontSize:"14px",color:"#374151"}}>• {r}</p>)}
+            </div>
+            {resultPlan.motivationalNote&&<div style={{background:"linear-gradient(135deg,#14532d,#16a34a)",borderRadius:"14px",padding:"16px",color:"#fff"}}><p style={{margin:"0 0 8px",fontSize:"14px",lineHeight:"1.7",fontStyle:"italic"}}>"{resultPlan.motivationalNote}"</p><p style={{margin:0,fontSize:"12px",color:"#86efac"}}>— {profile.name}, {profile.location}</p></div>}
+          </div>}
+
+          {planTab==="phases"&&<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+            {(resultPlan.phases||[]).map((p,i)=>(
+              <div key={i} style={{background:"#fff",borderRadius:"14px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                  <span style={{fontWeight:"700",color:"#15803d",fontSize:"14px"}}>{p.week}</span>
+                  <span style={{background:"#f0fdf4",color:"#15803d",fontSize:"11px",padding:"3px 10px",borderRadius:"50px",fontWeight:"600"}}>{p.theme}</span>
+                </div>
+                <p style={{margin:"0 0 4px",fontSize:"13px",color:"#374151"}}>💪 {p.desc}</p>
+                <p style={{margin:0,fontSize:"12px",color:"#6b7280"}}>🥗 {p.diet}</p>
+              </div>
+            ))}
+          </div>}
+
+          {/* Action Buttons */}
+          <div style={{background:"#fff",borderRadius:"16px",padding:"16px",marginTop:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+            <div style={{fontWeight:"700",color:"#374151",fontSize:"14px",marginBottom:"12px"}}>📤 {isEN?"Share Plan":"Plan Share करा"}</div>
+            <button onClick={async()=>{
+              if(!window.jspdf){alert("PDF library loading... wait 2 seconds");return;}
+              setPdfLoading(true);
+              try{generatePDF(resultPlan,form,profile);setTimeout(()=>alert("✅ PDF Downloaded!\n\nNow:\n1. Go to Files/Downloads\n2. Open the PDF\n3. Share → WhatsApp → Select client"),500);}
+              catch(e){alert("PDF Error: "+e.message);}
+              finally{setPdfLoading(false);}
+            }} disabled={pdfLoading} style={{width:"100%",background:pdfLoading?"#d1d5db":"#dc2626",border:"none",borderRadius:"12px",padding:"13px",color:"#fff",fontWeight:"700",fontSize:"14px",cursor:pdfLoading?"not-allowed":"pointer",marginBottom:"8px"}}>
+              {pdfLoading?"⏳ Creating PDF...":"📄 Download PDF Plan"}
+            </button>
+            <a href={waLink(profile.whatsapp,waMsg)} style={{display:"block",background:"#25D366",color:"#fff",fontWeight:"700",fontSize:"14px",padding:"13px",borderRadius:"12px",textDecoration:"none",textAlign:"center"}}>
+              📱 {isEN?"Send on WhatsApp":"WhatsApp वर पाठवा"}
+            </a>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginTop:"10px"}}>
+            <button onClick={()=>setScreen("client-list")} style={{background:"#f0fdf4",border:"2px solid #16a34a",borderRadius:"14px",padding:"13px",color:"#15803d",fontSize:"13px",fontWeight:"600",cursor:"pointer"}}>👥 {isEN?"My Clients":"Clients"}</button>
+            <button onClick={()=>{setScreen("new-client");setStep(1);setForm({name:"",age:"",gender:"",height:"",weight:"",goal:"",jobType:"",sleep:"",foodType:"",conditions:[],activity:"",phone:""});}} style={{background:"#f3f4f6",border:"none",borderRadius:"14px",padding:"13px",color:"#6b7280",fontSize:"13px",fontWeight:"600",cursor:"pointer"}}>🆕 {isEN?"New Client":"नवीन"}</button>
+          </div>
+          <button onClick={()=>setScreen("home")} style={{width:"100%",marginTop:"8px",background:"#f3f4f6",border:"none",borderRadius:"14px",padding:"13px",color:"#6b7280",fontSize:"14px",fontWeight:"600",cursor:"pointer"}}>{L.home}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DAILY RESULT ──
+  if(screen==="daily-result"&&dailyPlan){
+    const client=selectedClient;
+    const day=dailyPlan.day||dtDay;
+    const alreadyDone=client&&(client.completedDays||[]).includes(day);
+    const doneMsg=`Day ${day} complete!\nDevFit Coach - ${dailyPlan.clientName||""}\n${profile.name}: ${profile.whatsapp}`;
+    const meals=[["🌅","Early Morning",dailyPlan.diet?.earlyMorning],["🍽️","Breakfast",dailyPlan.diet?.breakfast],["🍱","Lunch",dailyPlan.diet?.lunch],["🫖","Evening Snack",dailyPlan.diet?.eveningSnack],["🌙","Dinner",dailyPlan.diet?.dinner]];
+    return(
+      <div style={{background:"#f8fafc",minHeight:"100vh",paddingBottom:"32px"}}>
+        <div style={{background:"linear-gradient(135deg,#1e40af,#3b82f6)",padding:"20px 16px",color:"#fff"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div><button onClick={()=>setScreen("client-list")} style={{background:"none",border:"none",color:"rgba(255,255,255,0.8)",fontSize:"14px",cursor:"pointer",padding:0,marginBottom:"6px",display:"block"}}>{L.back}</button><h1 style={{margin:"0 0 2px",fontSize:"22px",fontWeight:"800"}}>Day {day} 💪</h1><p style={{margin:0,fontSize:"13px",color:"#bfdbfe"}}>{dailyPlan.clientName} • {dailyPlan.phase||"Training"}</p></div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"8px"}}><LT/><div style={{background:"rgba(255,255,255,0.2)",borderRadius:"12px",padding:"8px 14px",textAlign:"center"}}><div style={{fontSize:"18px",fontWeight:"800"}}>{day}/15</div></div></div>
+          </div>
+          {dailyPlan.motivation&&<p style={{margin:"10px 0 0",fontSize:"13px",color:"#bfdbfe",fontStyle:"italic"}}>💬 "{dailyPlan.motivation}"</p>}
+        </div>
+        <div style={{display:"flex",background:"#fff",borderBottom:"3px solid #e5e7eb"}}>
+          {[["workout","🏋️ Workout","#1e40af"],["diet","🥗 Diet","#15803d"]].map(([k,lb,ac])=>(
+            <button key={k} onClick={()=>setDailyTab(k)} style={{flex:1,padding:"16px 4px",border:"none",background:"none",fontSize:"14px",fontWeight:dailyTab===k?"800":"500",color:dailyTab===k?ac:"#9ca3af",borderBottom:`4px solid ${dailyTab===k?ac:"transparent"}`,cursor:"pointer",marginBottom:"-3px"}}>{lb}</button>
+          ))}
+        </div>
+        <div style={{padding:"16px"}}>
+          {dailyTab==="workout"&&<div>
+            <div style={{background:"#fff",borderRadius:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden",marginBottom:"12px"}}>
+              <div style={{padding:"12px 16px",background:"#eff6ff",borderBottom:"1px solid #dbeafe"}}><div style={{fontWeight:"700",color:"#1e40af",fontSize:"14px"}}>⏱️ Warm-up + {dailyPlan.workout?.duration}</div></div>
+              <div style={{padding:"12px 16px",borderBottom:"1px solid #f3f4f6",fontSize:"13px",color:"#6b7280"}}>🔥 {dailyPlan.workout?.warmup}</div>
+              {(dailyPlan.workout?.exercises||[]).map((ex,i)=>(
+                <div key={i} style={{padding:"12px 16px",borderBottom:i<(dailyPlan.workout.exercises.length-1)?"1px solid #f3f4f6":"none",display:"flex",alignItems:"center",gap:"12px"}}>
+                  <div style={{width:"28px",height:"28px",borderRadius:"50%",background:"#dbeafe",color:"#1e40af",fontSize:"13px",fontWeight:"700",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
+                  <span style={{fontSize:"14px",color:"#374151",fontWeight:"500"}}>{ex}</span>
+                </div>
+              ))}
+              {dailyPlan.workout?.cooldown&&<div style={{padding:"12px 16px",background:"#f8fafc",fontSize:"13px",color:"#6b7280"}}>🧘 Cooldown: {dailyPlan.workout.cooldown}</div>}
+            </div>
+            {dailyPlan.workout?.tip&&<div style={{background:"#eff6ff",borderRadius:"12px",padding:"12px 16px",fontSize:"13px",color:"#1e40af",marginBottom:"12px"}}>💡 <strong>{profile.name}'s Tip:</strong> {dailyPlan.workout.tip}</div>}
+          </div>}
+          {dailyTab==="diet"&&<div>
+            <div style={{background:"#fef3c7",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px",fontSize:"13px",color:"#92400e"}}>📌 {isEN?"Today's personalised diet.":"आजचा वैयक्तिक आहार."}</div>
+            <div style={{background:"#fff",borderRadius:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",overflow:"hidden"}}>
+              {meals.map(([ic,lb,val],i)=>val&&<div key={i} style={{padding:"14px 16px",borderBottom:i<meals.length-1?"1px solid #f3f4f6":"none",display:"flex",gap:"12px",alignItems:"flex-start"}}><span style={{fontSize:"20px",flexShrink:0}}>{ic}</span><div><div style={{fontSize:"11px",color:"#9ca3af",fontWeight:"700",textTransform:"uppercase"}}>{lb}</div><div style={{fontSize:"14px",color:"#374151",marginTop:"3px",lineHeight:"1.5"}}>{val}</div></div></div>)}
+            </div>
+          </div>}
+          <div style={{marginTop:"16px"}}>
+            {alreadyDone
+              ?<div style={{background:"#f0fdf4",border:"2px solid #16a34a",borderRadius:"14px",padding:"14px",textAlign:"center"}}>
+                <div style={{fontSize:"22px",marginBottom:"4px"}}>✅</div>
+                <div style={{fontWeight:"700",color:"#15803d",fontSize:"14px"}}>Day {day} Already Completed!</div>
+              </div>
+              :<button onClick={()=>{if(client){markDayDone(client.code,day);setDailyDone(true);}else setDailyDone(true);}} style={{width:"100%",background:"#16a34a",border:"none",borderRadius:"14px",padding:"16px",color:"#fff",fontSize:"16px",fontWeight:"700",cursor:"pointer"}}>
+                {dailyDone?"✅ Day Done! Great job!":"✅ Mark Day "+day+" as Done!"}
+              </button>
+            }
+            {(dailyDone||alreadyDone)&&<a href={waLink(profile.whatsapp,doneMsg)} style={{display:"block",marginTop:"8px",background:"#25D366",color:"#fff",fontWeight:"700",padding:"12px",borderRadius:"12px",textDecoration:"none",textAlign:"center",fontSize:"14px"}}>📱 {isEN?"Send Progress to Coach":"Progress Coach ला पाठवा"}</a>}
+          </div>
+          <button onClick={()=>setScreen("client-list")} style={{width:"100%",marginTop:"10px",background:"#f3f4f6",border:"none",borderRadius:"14px",padding:"14px",color:"#6b7280",fontSize:"14px",fontWeight:"600",cursor:"pointer"}}>👥 {isEN?"Back to Clients":"Clients कडे जा"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ADMIN ──
+  if(screen==="admin"){
+    if(!adminAuth)return(
+      <div style={{minHeight:"100vh",background:"#1f2937",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 20px"}}>
+        <div style={{fontSize:"48px",marginBottom:"12px"}}>🔐</div>
+        <h2 style={{color:"#fff",margin:"0 0 4px"}}>Admin Login</h2>
+        <p style={{color:"#9ca3af",fontSize:"14px",marginBottom:"24px"}}>{isEN?"Devidas Patil Only":"फक्त देवीदास पाटील साठी"}</p>
+        <input type="password" placeholder={isEN?"Enter Password":"Password टाका"} value={adminInput} onChange={e=>setAdminInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(adminInput===ADMIN_PASS?(setAdminAuth(true),setAdminErr("")):(setAdminErr(isEN?"Wrong password!":"चुकीचा password!")))} style={{width:"100%",maxWidth:"300px",border:"2px solid #374151",borderRadius:"12px",padding:"14px",fontSize:"16px",background:"#374151",color:"#fff",outline:"none",boxSizing:"border-box",marginBottom:"10px"}}/>
+        {adminErr&&<p style={{color:"#f87171",fontSize:"13px",marginBottom:"8px"}}>{adminErr}</p>}
+        <div style={{display:"flex",gap:"10px",width:"100%",maxWidth:"300px"}}>
+          <button onClick={()=>setScreen("home")} style={{flex:1,background:"#374151",border:"none",borderRadius:"12px",padding:"14px",color:"#9ca3af",cursor:"pointer",fontSize:"14px"}}>{L.back}</button>
+          <button onClick={()=>adminInput===ADMIN_PASS?(setAdminAuth(true),setAdminErr("")):(setAdminErr(isEN?"Wrong password!":"चुकीचा password!"))} style={{flex:2,background:"#16a34a",border:"none",borderRadius:"12px",padding:"14px",color:"#fff",fontWeight:"700",cursor:"pointer",fontSize:"14px"}}>Login</button>
+        </div>
+      </div>
+    );
+
+    const totalRev=clients.reduce((s,c)=>s+parseFloat(c.amount||699),0);
+    return(
+      <div style={{background:"#f8fafc",minHeight:"100vh",paddingBottom:"40px"}}>
+        <div style={{background:"linear-gradient(135deg,#1f2937,#374151)",padding:"20px 16px",color:"#fff"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div><h2 style={{margin:0,fontSize:"18px",fontWeight:"700"}}>🔐 Admin Panel</h2><p style={{margin:0,fontSize:"12px",color:"#9ca3af"}}>DevFit Coach</p></div>
+            <div style={{display:"flex",gap:"8px"}}><LT/><button onClick={()=>setScreen("home")} style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#9ca3af",padding:"8px 12px",borderRadius:"8px",cursor:"pointer",fontSize:"12px"}}>{L.home}</button></div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginTop:"16px"}}>
+            {[["₹"+totalRev.toLocaleString(),isEN?"Revenue":"उत्पन्न"],[clients.filter(c=>c.status==="active").length,isEN?"Active":"Active"],[clients.length,isEN?"Total":"एकूण"]].map(([v,l])=>(
+              <div key={l} style={{background:"rgba(255,255,255,0.1)",borderRadius:"12px",padding:"12px 8px",textAlign:"center"}}><div style={{fontSize:"16px",fontWeight:"700"}}>{v}</div><div style={{fontSize:"10px",color:"#9ca3af",marginTop:"2px"}}>{l}</div></div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{display:"flex",background:"#fff",borderBottom:"2px solid #e5e7eb"}}>
+          {[["clients",isEN?"👥 Clients":"👥 Clients"],["profile",isEN?"👤 Profile":"👤 Profile"],["settings",isEN?"⚙️ Settings":"⚙️ Settings"]].map(([k,lb])=>(
+            <button key={k} onClick={()=>setAdminTab(k)} style={{flex:1,padding:"12px 4px",border:"none",background:"none",fontSize:"12px",fontWeight:adminTab===k?"700":"500",color:adminTab===k?"#15803d":"#6b7280",borderBottom:`2px solid ${adminTab===k?"#15803d":"transparent"}`,cursor:"pointer",marginBottom:"-2px"}}>{lb}</button>
+          ))}
+        </div>
+
+        <div style={{padding:"16px"}}>
+          {/* CLIENTS */}
+          {adminTab==="clients"&&<div>
+            <button onClick={()=>setScreen("client-list")} style={{width:"100%",background:"#1e40af",border:"none",borderRadius:"14px",padding:"14px",color:"#fff",fontWeight:"700",fontSize:"15px",cursor:"pointer",marginBottom:"16px"}}>📅 {isEN?"Open Training Center":"Training Center उघडा"}</button>
+            <h3 style={{margin:"0 0 12px",fontSize:"15px",color:"#374151"}}>{isEN?"All Clients":"सर्व Clients"} ({clients.length})</h3>
+            {clients.map(c=>{
+              const d=Math.min(daysSince(c.startDate),15);
+              const pct=Math.round((c.completedDays||[]).length/15*100);
+              return <div key={c.id} style={{background:"#fff",borderRadius:"14px",padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",marginBottom:"10px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:"8px"}}>
+                  <div><div style={{fontWeight:"700",fontSize:"15px"}}>{c.name}</div><div style={{fontSize:"12px",color:"#6b7280"}}>📱 {c.phone||"—"} • {GK[c.goal]||c.goal}</div><div style={{fontSize:"11px",color:"#9ca3af"}}>🔑 {c.code} • Day {d}/15</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:"14px",fontWeight:"700",color:"#15803d"}}>₹{parseFloat(c.amount||699).toLocaleString()}</div><div style={{fontSize:"11px",color:"#3b82f6",fontWeight:"600"}}>{pct}% done</div></div>
+                </div>
+                <div style={{background:"#f3f4f6",borderRadius:"6px",height:"6px",overflow:"hidden",marginBottom:"10px"}}><div style={{background:pct>=80?"#16a34a":pct>=40?"#f97316":"#3b82f6",height:"100%",width:pct+"%",borderRadius:"6px"}}/></div>
+                <button onClick={()=>{setSelectedClient(c);getDailyPlanForClient(c,d);}} style={{width:"100%",background:"#1e40af",border:"none",borderRadius:"10px",padding:"10px",color:"#fff",fontWeight:"600",fontSize:"13px",cursor:"pointer"}}>📅 {isEN?"Send Day "+d+" Plan":"Day "+d+" Plan पाठवा"}</button>
+              </div>;
+            })}
+          </div>}
+
+          {/* PROFILE */}
+          {adminTab==="profile"&&<div>
+            <div style={{background:"#fff",borderRadius:"16px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)",marginBottom:"12px"}}>
+              <h3 style={{margin:"0 0 14px",fontSize:"15px"}}>👤 {isEN?"Coach Profile":"Coach Profile"}</h3>
+              {[["Name",profileEdit.name,v=>setProfileEdit({...profileEdit,name:v})],
+                ["Title (e.g. Certified Fitness Coach)",profileEdit.title,v=>setProfileEdit({...profileEdit,title:v})],
+                ["Location",profileEdit.location,v=>setProfileEdit({...profileEdit,location:v})],
+                ["Experience",profileEdit.experience,v=>setProfileEdit({...profileEdit,experience:v})],
+                ["Specialization (comma separated)",profileEdit.specialization,v=>setProfileEdit({...profileEdit,specialization:v})],
+                ["WhatsApp Number",profileEdit.whatsapp,v=>setProfileEdit({...profileEdit,whatsapp:v})],
+                ["Tagline / Motto",profileEdit.tagline,v=>setProfileEdit({...profileEdit,tagline:v})],
+              ].map(([lb,val,setter])=>(
+                <div key={lb} style={{marginBottom:"12px"}}>
+                  <div style={{fontSize:"13px",fontWeight:"700",color:"#374151",marginBottom:"5px"}}>{lb}</div>
+                  <input type="text" value={val||""} onChange={e=>setter(e.target.value)} style={{width:"100%",border:"2px solid #e5e7eb",borderRadius:"10px",padding:"10px 12px",fontSize:"14px",outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              ))}
+              <button onClick={()=>{setProfile({...profileEdit});lsSet("dfc_profile",profileEdit);alert("✅ Profile Saved!");}} style={{width:"100%",background:"#15803d",border:"none",borderRadius:"12px",padding:"14px",color:"#fff",fontWeight:"700",fontSize:"15px",cursor:"pointer"}}>✅ {isEN?"Save Profile":"Profile Save करा"}</button>
+            </div>
+            <div style={{background:"linear-gradient(135deg,#14532d,#15803d)",borderRadius:"16px",padding:"16px",color:"#fff",textAlign:"center"}}>
+              <div style={{fontSize:"11px",color:"#86efac",marginBottom:"8px"}}>Preview</div>
+              <div style={{fontSize:"28px",marginBottom:"6px"}}>💪</div>
+              <div style={{fontSize:"17px",fontWeight:"800"}}>{profileEdit.name}</div>
+              <div style={{fontSize:"12px",color:"#86efac",fontWeight:"600"}}>{profileEdit.title}</div>
+              <div style={{fontSize:"11px",color:"#d1fae5",marginTop:"2px"}}>📍 {profileEdit.location}</div>
+              {profileEdit.tagline&&<div style={{background:"rgba(255,255,255,0.12)",borderRadius:"10px",padding:"7px 12px",marginTop:"8px",fontSize:"12px",fontStyle:"italic"}}>"{profileEdit.tagline}"</div>}
+            </div>
+          </div>}
+
+          {/* SETTINGS */}
+          {adminTab==="settings"&&<div>
+            <div style={{background:"#fff",borderRadius:"16px",padding:"16px",boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
+              <h3 style={{margin:"0 0 4px",fontSize:"15px"}}>🔑 Groq API Key</h3>
+              <p style={{fontSize:"13px",color:"#6b7280",marginBottom:"12px"}}>{isEN?"Free! No credit card. Enter once.":"मोफत! Credit Card नाही. एकदा टाका."}</p>
+              {apiKey&&<div style={{background:"#f0fdf4",border:"1px solid #d1fae5",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px",fontSize:"13px",color:"#15803d"}}>✅ Key set आहे ({apiKey.slice(0,12)}...)</div>}
+              <input type="password" placeholder="gsk_..." value={apiKeyInput} onChange={e=>setApiKeyInput(e.target.value)} style={{width:"100%",border:"2px solid #e5e7eb",borderRadius:"12px",padding:"12px 14px",fontSize:"14px",outline:"none",boxSizing:"border-box",marginBottom:"10px"}}/>
+              <button onClick={saveKey} style={{width:"100%",background:"#1e40af",border:"none",borderRadius:"12px",padding:"13px",color:"#fff",fontWeight:"700",fontSize:"15px",cursor:"pointer"}}>{apiKeySaved?"✅ Saved!":"Save Key"}</button>
+              <div style={{background:"#f0fdf4",borderRadius:"12px",padding:"14px",marginTop:"14px"}}>
+                <div style={{fontWeight:"700",color:"#15803d",marginBottom:"10px",fontSize:"14px"}}>✅ {isEN?"Get Free Groq Key (2 min):":"मोफत Groq Key कशी मिळवायची:"}</div>
+                {[["1","Open: console.groq.com"],["2","Sign Up — only Email needed, free!"],["3",'"API Keys" → "Create API Key"'],["4","Copy key starting with gsk_..."],["5","Paste above → Save Key"],["6","✅ App ready! No rate limits."]].map(([n,s])=>(
+                  <div key={n} style={{display:"flex",gap:"10px",alignItems:"flex-start",marginBottom:"8px"}}>
+                    <div style={{width:"22px",height:"22px",borderRadius:"50%",background:"#16a34a",color:"#fff",fontSize:"12px",fontWeight:"700",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{n}</div>
+                    <span style={{fontSize:"13px",color:"#374151",lineHeight:"1.5"}}>{s}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"#eff6ff",borderRadius:"10px",padding:"12px",marginTop:"10px",fontSize:"13px",color:"#1e40af",lineHeight:"1.6"}}>
+                🎁 <strong>Groq Free:</strong> 14,400 req/day • 30 req/min<br/>
+                No rate limit issues. 100% free forever!
+              </div>
+            </div>
+          </div>}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
